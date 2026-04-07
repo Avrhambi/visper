@@ -1,0 +1,95 @@
+# config.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+# STT Configuration — edit this file to tune accuracy, speed, and behaviour.
+# Hardware config is determined automatically — do NOT add DEVICE or
+# COMPUTE_TYPE here. Those live in benchmark_results.json.
+# ─────────────────────────────────────────────────────────────────────────────
+
+language: "he"
+model_id: "ivrit-ai/whisper-large-v3-turbo-ct2"
+
+# ── Resource profile ──────────────────────────────────────────────────────────
+# foreground  — uses benchmark-winning config, no restrictions. Best speed.
+# background  — caps CPU threads to half, lowers process priority, unloads model after idle.
+# minimal     — CPU-only, 2 threads, int8. Lowest footprint.
+resource_profile: "foreground"
+
+max_cpu_threads: 0       # 0 = no cap. Hard cap regardless of benchmark winner.
+max_ram_mb: 0            # 0 = no limit. Warn if exceeded.
+max_vram_mb: 0           # 0 = no limit. Fall back to CPU if exceeded.
+
+idle_unload_seconds: 0   # 0 = never unload. Unload model after N seconds of silence.
+                          # Recommended: 60 for background, 0 for foreground.
+
+# ── Accuracy mode ────────────────────────────────────────────────────────────
+# auto      — picks highest accuracy tier your hardware can run without RTF > 0.85
+# fast      — beam_size=1, greedy. Best for real-time streaming on weak hardware.
+# balanced  — beam_size=3. Good quality, moderate compute.
+# accurate  — beam_size=5, best_of=3. Maximum quality. Needs hardware headroom.
+accuracy_mode: "auto"
+
+bucket_accuracy_overrides: {}
+# Example — accurate for long files, fast for streaming:
+#   bucket_accuracy_overrides:
+#     streaming: "fast"
+#     short:     "balanced"
+#     long:      "accurate"
+#     extended:  "accurate"
+
+# ── Manual parameter overrides (advanced) ────────────────────────────────────
+manual_params:
+  beam_size: 0              # 0 = auto
+  temperature: -1           # -1 = auto
+  best_of: 0                # 0 = auto
+  patience: -1              # -1 = auto
+  condition_on_prev_text: null
+  without_timestamps: null
+  compression_ratio_threshold: -1
+  log_prob_threshold: -1
+  no_speech_threshold: -1
+
+# ── VAD settings ─────────────────────────────────────────────────────────────
+vad_filter: true
+vad_min_silence_ms: 300
+vad_speech_pad_ms: 200
+
+# ── Streaming settings ────────────────────────────────────────────────────────
+max_chunk_seconds: 28
+stream_flush_on_silence: true
+
+# ── Output settings ───────────────────────────────────────────────────────────
+output_format: "txt"         # txt | srt | json
+write_output_file: true      # write <input_filename>.txt alongside input
+print_to_stdout: true
+
+# ── Background process mode ───────────────────────────────────────────────────
+run_in_background: false
+
+# ── Benchmark mode ───────────────────────────────────────────────────────────
+# smart (default): tests 1-2 best compute types × 2 smart thread counts.
+#   ~4-6 CPU candidates instead of 20+.  3-5× faster than full.
+# full: exhaustive — all compute types × thread counts [2,4,6,8].
+#   Same as running: python run_benchmark.py --full
+benchmark_mode: "smart"
+
+# ── Compute override (advanced) ───────────────────────────────────────────────
+# Leave blank to use auto-detected best config from benchmark_results.json.
+force_device: ""             # "" | "cpu" | "cuda" | "openvino"
+force_compute_type: ""       # "" | "int8" | "float16" | "int8_float16" | etc.
+force_cpu_threads: 0         # 0 = use benchmark result
+
+# Set skip_benchmark: true together with force_device + force_compute_type to
+# bypass the benchmark entirely — no benchmark_results.json needed.
+# force_cpu_threads is also used when set; otherwise defaults to physical_cores/2.
+#
+# Example — fully manual CPU config:
+#   skip_benchmark: true
+#   force_device: "cpu"
+#   force_compute_type: "int8"
+#   force_cpu_threads: 4
+skip_benchmark: false
+
+# ── iGPU preference ───────────────────────────────────────────────────────────
+# If Intel iGPU (OpenVINO) RTF is within this margin of the benchmark winner,
+# prefer the iGPU for power efficiency. 0.0 = disabled, 0.2 = 20% margin.
+igpu_preference_margin: 0.20
