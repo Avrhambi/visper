@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "stt-he"
+version = "0.2.0"
+description = "Hebrew speech-to-text transcription engine"
+requires-python = ">=3.10"
+
+[project.scripts]
+stt-file      = "transcribe_file:main"
+stt-live      = "transcribe_live:main"
+stt-benchmark = "run_benchmark:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["core*"]
