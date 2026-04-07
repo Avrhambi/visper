@@ -248,14 +248,20 @@ def run(request: dict) -> dict:
             t0 = time.time()
             _infer(model, s_audio, candidate)
             rtfs.append(round((time.time() - t0) / s_dur, 4))
-        median_rtf = sorted(rtfs[1:])[len(rtfs[1:]) // 2]
+        import statistics
+        measured = rtfs[1:]  # skip warm-up call
+        median_rtf = sorted(measured)[len(measured) // 2]
+        stdev_rtf = statistics.stdev(measured) if len(measured) >= 2 else 0.0
+        p95_rtf = sorted(measured)[-1]  # with 4 values, p95 ≈ max
         results["streaming"] = {
             "status":         "ok",
             "median_rtf":     round(median_rtf, 4),
+            "rtf_stdev":      round(stdev_rtf, 4),
+            "rtf_p95":        round(p95_rtf, 4),
             "rtf_per_call":   rtfs,
             "audio_duration": s_dur,
         }
-        print(f"[Worker]   streaming: median RTF {median_rtf:.3f}", file=sys.stderr, flush=True)
+        print(f"[Worker]   streaming: median RTF {median_rtf:.3f} ±{stdev_rtf:.3f}", file=sys.stderr, flush=True)
 
     except Exception as e:
         err = str(e)[:300]

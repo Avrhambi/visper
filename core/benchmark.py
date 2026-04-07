@@ -86,6 +86,23 @@ _WARMUP_SKIP_RTF = 3.0
 _ELITE_RTF = 0.15
 
 
+def _streaming_better(new_r: dict, cur_r: dict) -> bool:
+    """
+    Return True if new_r is a better streaming result than cur_r.
+    Primary: lower median RTF. Tie-break within 10%: prefer lower stdev (more stable).
+    """
+    new_med = new_r.get("median_rtf", 999)
+    cur_med = cur_r.get("rtf", 999)   # best["streaming"] stores "rtf" = median_rtf
+    new_std = new_r.get("rtf_stdev", 0.0)
+    cur_std = cur_r.get("rtf_stdev", 999.0)
+    if cur_med == 0:
+        return False
+    within_10pct = abs(new_med - cur_med) / cur_med < 0.10
+    if within_10pct:
+        return new_std < cur_std
+    return new_med < cur_med
+
+
 # ---------------------------------------------------------------------------
 # Duration helpers
 # ---------------------------------------------------------------------------
@@ -863,9 +880,10 @@ def run_benchmark(force: bool = False, quick: bool = False, full: bool = False) 
             results["streaming"].append(r_stream)
             if r_stream["status"] == "ok":
                 mrt = r_stream["median_rtf"]
-                if best["streaming"] is None or mrt < best["streaming"].get("rtf", 999):
+                if best["streaming"] is None or _streaming_better(r_stream, best["streaming"]):
                     best["streaming"] = {k: v for k, v in candidate.items() if k != "label"}
                     best["streaming"]["rtf"] = mrt
+                    best["streaming"]["rtf_stdev"] = r_stream.get("rtf_stdev", 0.0)
 
         # Print summary line for this candidate
         bucket_rtfs = " | ".join(
@@ -875,7 +893,8 @@ def run_benchmark(force: bool = False, quick: bool = False, full: bool = False) 
         )
         stream_r = session.get("streaming", {})
         if stream_r.get("status") == "ok":
-            bucket_rtfs += f" | str {stream_r['median_rtf']:.3f}"
+            std_str = f" ±{stream_r['rtf_stdev']:.3f}" if "rtf_stdev" in stream_r else ""
+            bucket_rtfs += f" | str {stream_r['median_rtf']:.3f}{std_str}"
         print(f"  {bucket_rtfs}")
 
         # Mark elite if best bucket RTF < threshold
