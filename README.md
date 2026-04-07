@@ -10,7 +10,7 @@ Model: [`ivrit-ai/whisper-large-v3-turbo-ct2`](https://huggingface.co/ivrit-ai/w
 
 - Python 3.10+
 - ffmpeg on PATH (required for MP3/MP4/M4A; WAV works without it)
-- Target hardware: Intel i5-1135G7, NVIDIA MX350 (2GB), Intel Iris Xe, 16GB RAM, Windows
+- Tested hardware: Intel i5-1135G7, NVIDIA MX350 (2GB), Intel Iris Xe, 16GB RAM, Windows
 
 ---
 
