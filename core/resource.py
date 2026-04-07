@@ -186,3 +186,58 @@ def _get_vram_used_mb() -> Optional[float]:
     except Exception:
         pass
     return None
+
+
+def _get_vram_free_mb() -> Optional[float]:
+    """Return free VRAM in MB using torch.cuda.mem_get_info (different from reserved)."""
+    try:
+        import torch
+        if torch.cuda.is_available():
+            free_bytes, _ = torch.cuda.mem_get_info(0)
+            return free_bytes / 1024 / 1024
+    except ImportError:
+        pass
+    except Exception:
+        pass
+    return None
+
+
+# Estimated VRAM required to load whisper-large-v3-turbo-ct2, by compute type.
+_MODEL_VRAM_ESTIMATE_MB = {
+    "float16":      1650,
+    "bfloat16":     1650,
+    "int8_float16": 950,
+    "int8_bfloat16": 950,
+    "int8_float32": 1200,
+    "int8":         900,
+}
+_VRAM_HEADROOM_MB = 200  # Keep at least this many MB free after load
+
+
+def check_vram_before_load(config: dict) -> dict:
+    """
+    Proactively check free VRAM before loading a CUDA model.
+    Demotes to CPU+int8 if the estimated model size won't fit with headroom.
+    This is a pre-load guard; transcriber._load_direct() also catches OOM at load time.
+    """
+    cfg = dict(config)
+    if cfg.get("device") != "cuda":
+        return cfg
+
+    compute_type = cfg.get("compute_type", "int8")
+    required_mb = _MODEL_VRAM_ESTIMATE_MB.get(compute_type, 1200) + _VRAM_HEADROOM_MB
+
+    free_mb = _get_vram_free_mb()
+    if free_mb is None:
+        return cfg  # Can't check — proceed optimistically
+
+    if free_mb < required_mb:
+        print(
+            f"[STT] VRAM pre-load: {free_mb:.0f} MB free, need ~{required_mb} MB "
+            f"({compute_type} + {_VRAM_HEADROOM_MB} MB headroom) — falling back to CPU int8",
+            file=sys.stderr,
+        )
+        cfg["device"] = "cpu"
+        cfg["compute_type"] = "int8"
+
+    return cfg

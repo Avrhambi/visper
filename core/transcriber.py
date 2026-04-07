@@ -16,13 +16,19 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 import numpy as np
 
 ROOT = Path(__file__).parent.parent
 MODEL_ID = "ivrit-ai/whisper-large-v3-turbo-ct2"
 OV_MODEL_DIR = "ov_model"
+
+
+def _ov_set(cfg, attr: str, val) -> None:
+    """Set a WhisperGenerateConfig attribute only if it exists in this openvino_genai version."""
+    if hasattr(cfg, attr):
+        setattr(cfg, attr, val)
 
 
 @dataclass
@@ -48,10 +54,24 @@ class Transcriber:
 
         Applies resource profile before loading the backend.
         """
-        from core.resource import apply_profile, check_memory_headroom
+        from core.resource import apply_profile, check_memory_headroom, check_vram_before_load
         config = apply_profile(config)
         config = check_memory_headroom(config)
+        config = check_vram_before_load(config)
         self._config = config
+
+        # Load per-session config flags
+        self._confidence_retry_enabled = False
+        self._language = "he"
+        try:
+            import yaml as _yaml
+            _cfg_path = ROOT / "config.yaml"
+            if _cfg_path.exists():
+                _ucfg = _yaml.safe_load(_cfg_path.read_text()) or {}
+                self._confidence_retry_enabled = _ucfg.get("confidence_retry_enabled", False)
+                self._language = _ucfg.get("language", "he")
+        except Exception:
+            pass
         self._backend_type = config["device"]
         self._config_label = self._make_label(config)
         self._first_call = True
@@ -74,7 +94,23 @@ class Transcriber:
     def _load_direct(self, config: dict) -> None:
         print(f"[Transcriber] Loading model: {MODEL_ID} ({self._config_label})...", file=sys.stderr)
         t0 = time.time()
-        self._backend = self._load_backend(config)
+        try:
+            self._backend = self._load_backend(config)
+        except Exception as e:
+            if "out of memory" in str(e).lower() or "outofmemory" in type(e).__name__.lower():
+                print(
+                    f"[Transcriber] OOM loading {config.get('device')} model — "
+                    "retrying with CPU int8",
+                    file=sys.stderr,
+                )
+                fallback = dict(config)
+                fallback["device"] = "cpu"
+                fallback["compute_type"] = "int8"
+                self._backend_type = "cpu"
+                self._config_label = self._make_label(fallback)
+                self._backend = self._load_backend(fallback)
+            else:
+                raise
         elapsed = time.time() - t0
         print(f"[Transcriber] Model ready ({elapsed:.1f}s load)", file=sys.stderr)
 
@@ -159,10 +195,23 @@ class Transcriber:
         else:
             raise RuntimeError(f"Unknown device in config: {device!r}")
 
+    @staticmethod
+    def _confidence_ok(seg_list: list, threshold: float) -> bool:
+        """
+        Duration-weighted average log-probability check.
+        Returns True if quality is acceptable (avg_logprob >= threshold).
+        """
+        if not seg_list:
+            return True
+        total_weight = sum(max(s.end - s.start, 0.01) for s in seg_list)
+        weighted = sum(s.avg_logprob * max(s.end - s.start, 0.01) for s in seg_list)
+        return (weighted / total_weight) >= threshold
+
     def transcribe(
         self,
         source: Union[str, Path, np.ndarray],
         bucket: str = "medium",
+        on_segment: Optional[Callable[[dict], None]] = None,
     ) -> TranscriptResult:
         """
         source: file path or float32 numpy array at 16 kHz.
@@ -206,12 +255,46 @@ class Transcriber:
                 speech_pad_ms=vad_speech_pad_ms,
             )
 
-            segs, info = self._backend.transcribe(audio, **kwargs)
-            seg_list = list(segs)
+            segs_gen, info = self._backend.transcribe(audio, **kwargs)
+            seg_list = []   # raw Segment objects (needed for avg_logprob)
+            segments = []   # dicts for TranscriptResult
+            for s in segs_gen:
+                seg_dict = {"start": s.start, "end": s.end, "text": s.text}
+                seg_list.append(s)
+                segments.append(seg_dict)
+                if on_segment is not None:
+                    on_segment(seg_dict)
             text = "".join(s.text for s in seg_list).strip()
-            segments = [{"start": s.start, "end": s.end, "text": s.text} for s in seg_list]
             if not isinstance(audio, np.ndarray):
                 audio_duration = info.duration
+
+            # Confidence-gated retry: re-run at next tier if quality is low
+            if (self._confidence_retry_enabled
+                    and bucket != "streaming"
+                    and seg_list
+                    and not self._confidence_ok(seg_list, params.log_prob_threshold)):
+                from core.params import next_tier, get_params_for_tier
+                upgrade = next_tier(params.tier_used)
+                if upgrade:
+                    print(f"[STT] Low confidence — retrying at '{upgrade}' tier", file=sys.stderr)
+                    params = get_params_for_tier(upgrade, bucket, self._config)
+                    kwargs2 = params.as_transcribe_kwargs()
+                    kwargs2["language"] = "he"
+                    kwargs2["vad_filter"] = vad_filter
+                    kwargs2["vad_parameters"] = dict(
+                        min_silence_duration_ms=vad_min_silence_ms,
+                        speech_pad_ms=vad_speech_pad_ms,
+                    )
+                    segs2, info = self._backend.transcribe(audio, **kwargs2)
+                    seg_list = list(segs2)
+                    segments = [{"start": s.start, "end": s.end, "text": s.text}
+                                for s in seg_list]
+                    text = "".join(s.text for s in seg_list).strip()
+
+            # Hebrew normalization
+            if self._language == "he":
+                from core.postprocess import normalize_hebrew
+                text = normalize_hebrew(text)
 
         elif self._backend_type == "openvino":
             import openvino_genai as ov_genai
@@ -220,10 +303,15 @@ class Transcriber:
 
             gen_config = ov_genai.WhisperGenerateConfig()
             gen_config.language = "<|he|>"
-            gen_config.beam_size = params.beam_size
             gen_config.return_timestamps = not params.without_timestamps
+            _ov_set(gen_config, "beam_size", params.beam_size)
+            _ov_set(gen_config, "temperature", params.temperature)
+            _ov_set(gen_config, "repetition_penalty", params.patience)
             result = self._backend.generate(audio, gen_config)
             text = result.texts[0].strip() if result.texts else ""
+            if self._language == "he":
+                from core.postprocess import normalize_hebrew
+                text = normalize_hebrew(text)
             segments = []
             if not params.without_timestamps and hasattr(result, "chunks") and result.chunks:
                 segments = [
