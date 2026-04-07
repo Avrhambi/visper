@@ -3,6 +3,7 @@
 
 # ── Claude Code ───────────────────────────────────────────────────────────────
 .claude/
+CLAUDE.md
 
 # ── Auto-generated benchmark output ───────────────────────────────────────────
 benchmark_results.json
@@ -22,6 +23,7 @@ build/
 .venv/
 venv/
 env/
+.venvs/          # device-specific venvs managed by venv_manager.py
 
 # ── OS ────────────────────────────────────────────────────────────────────────
 .DS_Store
@@ -40,3 +42,10 @@ desktop.ini
 
 # ── Logs ─────────────────────────────────────────────────────────────────────
 *.log
+
+# ── Temp files from transcriber worker ────────────────────────────────────────
+*.npy
+
+# ── audios ────────────────────────────────────────────────────────────────────
+ai.wav
+tveria.wav

@@ -106,6 +106,7 @@ class Transcriber:
                 fallback = dict(config)
                 fallback["device"] = "cpu"
                 fallback["compute_type"] = "int8"
+                self._config = fallback  # keep internal state consistent
                 self._backend_type = "cpu"
                 self._config_label = self._make_label(fallback)
                 self._backend = self._load_backend(fallback)
@@ -268,7 +269,9 @@ class Transcriber:
             if not isinstance(audio, np.ndarray):
                 audio_duration = info.duration
 
-            # Confidence-gated retry: re-run at next tier if quality is low
+            # Confidence-gated retry: re-run at next tier if quality is low.
+            # on_segment is NOT re-called for retry segments — the original callbacks
+            # already fired; the final result.text reflects the retry output.
             if (self._confidence_retry_enabled
                     and bucket != "streaming"
                     and seg_list

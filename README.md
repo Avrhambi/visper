@@ -59,6 +59,7 @@ python transcribe_file.py audio.wav --output srt
 python transcribe_file.py audio.mp3 --output json
 python transcribe_file.py audio.mp3 --no-file       # print only, no file written
 python transcribe_file.py audio.mp3 --clip          # copy to clipboard
+python transcribe_file.py audio.mp3 --progress      # print each segment to stderr as decoded
 python transcribe_file.py *.wav                     # batch mode
 ```
 
@@ -69,6 +70,17 @@ from stt_he import transcribe
 
 text = transcribe("audio.mp3")          # auto-detects duration bucket
 text = transcribe("audio.wav", bucket="long")
+```
+
+For progress feedback on long files, use `transcribe_chunked()`:
+
+```python
+from core.api import transcribe_chunked
+
+def on_segment(seg):
+    print(f"[{seg['start']:.1f}s] {seg['text'].strip()}")
+
+text = transcribe_chunked("long_recording.mp3", on_segment=on_segment)
 ```
 
 Install as editable package first to use from other projects:
@@ -191,11 +203,14 @@ force_cpu_threads: 4          # 0 = auto
 
 ```yaml
 vad_filter: true              # Silero VAD
+vad_min_silence_ms: 300       # silence duration that triggers a chunk emit
+noise_calibration_seconds: 1.5  # record ambient noise at live session start to set VAD threshold; 0 = disabled
 max_chunk_seconds: 28         # max chunk before forced emit in streaming
 output_format: "txt"          # default output format: txt | srt | json
 idle_unload_seconds: 0        # 0 = never unload model
 max_cpu_threads: 0            # 0 = no cap
 igpu_preference_margin: 0.20  # prefer Intel iGPU if RTF within 20% of best
+confidence_retry_enabled: false  # retry at next accuracy tier if avg log-prob below threshold
 ```
 
 ---
@@ -217,11 +232,12 @@ python tests/test_benchmark_full.py  # exhaustive benchmark (all combinations)
 
 ```
 core/benchmark.py        ← hardware detection, candidate selection, config selection
-core/resource.py         ← resource profile enforcement (threads, GPU, priority)
+core/resource.py         ← resource profile enforcement (threads, GPU, VRAM guard, priority)
 core/params.py           ← Whisper parameter selection per bucket/tier
 core/transcriber.py      ← dispatches to faster-whisper or openvino_genai
-core/api.py              ← public API: transcribe(), stream_transcribe()
-core/streamer.py         ← VAD-gated live chunked transcription
+core/api.py              ← public API: transcribe(), stream_transcribe(), transcribe_chunked()
+core/streamer.py         ← VAD-gated live chunked transcription (with noise calibration)
+core/postprocess.py      ← Hebrew text normalization (nikud stripping, Gershayim quotes)
 core/constants.py        ← audio constants (SAMPLE_RATE, CHANNELS, BLOCK_SIZE, DTYPE)
 transcribe_file.py       ← CLI offline transcription
 transcribe_live.py       ← CLI live/streaming transcription
@@ -230,7 +246,7 @@ config.yaml              ← user-tunable parameters (committed)
 .env.example             ← environment variable template (committed)
 .env                     ← secrets / local overrides (gitignored)
 benchmark_results.json   ← auto-generated, never hand-edited (gitignored)
-.claude/                 ← Claude Code project settings (gitignored)
+.venvs/                  ← device-specific venvs (gitignored, managed automatically)
 records/                 ← Hebrew audio files used as benchmark inputs
 tests/                   ← standalone hardware validation scripts
 ```

@@ -40,6 +40,7 @@ from __future__ import annotations
 import gc
 import json
 import os
+import statistics
 import sys
 import time
 from pathlib import Path
@@ -248,7 +249,6 @@ def run(request: dict) -> dict:
             t0 = time.time()
             _infer(model, s_audio, candidate)
             rtfs.append(round((time.time() - t0) / s_dur, 4))
-        import statistics
         measured = rtfs[1:]  # skip warm-up call
         median_rtf = sorted(measured)[len(measured) // 2]
         stdev_rtf = statistics.stdev(measured) if len(measured) >= 2 else 0.0
