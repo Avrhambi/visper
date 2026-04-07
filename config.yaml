@@ -27,6 +27,7 @@ idle_unload_seconds: 0   # 0 = never unload. Unload model after N seconds of sil
 # balanced  — beam_size=3. Good quality, moderate compute.
 # accurate  — beam_size=5, best_of=3. Maximum quality. Needs hardware headroom.
 accuracy_mode: "auto"
+confidence_retry_enabled: false  # Re-run at next accuracy tier if avg log-prob below threshold. Off by default (adds latency).
 
 bucket_accuracy_overrides: {}
 # Example — accurate for long files, fast for streaming:
@@ -52,6 +53,7 @@ manual_params:
 vad_filter: true
 vad_min_silence_ms: 300
 vad_speech_pad_ms: 200
+noise_calibration_seconds: 1.5  # 0 = disable. Records ambient noise at session start to set VAD threshold.
 
 # ── Streaming settings ────────────────────────────────────────────────────────
 max_chunk_seconds: 28

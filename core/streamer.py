@@ -81,8 +81,9 @@ class LiveStreamer:
                 self._vad_min_silence_ms = cfg.get("vad_min_silence_ms", 300)
                 self._max_chunk_s = cfg.get("max_chunk_seconds", MAX_CHUNK_S)
                 self._stream_flush_on_silence = cfg.get("stream_flush_on_silence", True)
+                self._noise_calibration_seconds = cfg.get("noise_calibration_seconds", 1.5)
         except Exception:
-            pass
+            self._noise_calibration_seconds = 1.5
         from core.resource import get_idle_unload_seconds
         self._idle_unload_seconds = get_idle_unload_seconds()
 
@@ -158,6 +159,36 @@ class LiveStreamer:
             self._enqueue_chunk(chunk, is_final=True)
 
     # ------------------------------------------------------------------
+    # Noise floor calibration
+    # ------------------------------------------------------------------
+
+    def _calibrate_noise_floor(self) -> float:
+        """
+        Record a short burst of ambient audio and derive a silence RMS threshold.
+        Returns max(0.01, measured_rms * 1.5) so the threshold sits 50% above floor.
+        Returns 0.01 if calibration is disabled or fails.
+        """
+        if not getattr(self, "_noise_calibration_seconds", 0):
+            return 0.01
+        try:
+            import sounddevice as sd
+            n_samples = int(self._noise_calibration_seconds * SAMPLE_RATE)
+            print(f"[STT] Calibrating noise floor ({self._noise_calibration_seconds:.1f}s)...",
+                  file=sys.stderr)
+            recording = sd.rec(n_samples, samplerate=SAMPLE_RATE,
+                               channels=CHANNELS, dtype=DTYPE)
+            sd.wait()
+            rms = float(np.sqrt(np.mean(recording ** 2)))
+            threshold = max(0.01, rms * 1.5)
+            print(f"[STT] Noise calibration: RMS {rms:.4f} → silence threshold {threshold:.4f}",
+                  file=sys.stderr)
+            return threshold
+        except Exception as e:
+            print(f"[STT] Noise calibration failed ({e}), using default threshold 0.01",
+                  file=sys.stderr)
+            return 0.01
+
+    # ------------------------------------------------------------------
     # Producer — microphone mode
     # ------------------------------------------------------------------
 
@@ -169,7 +200,7 @@ class LiveStreamer:
         silence_frames = 0
         silence_threshold_frames = int((self._vad_min_silence_ms / 1000) * SAMPLE_RATE / BLOCK_SIZE)
         max_frames = int(self._max_chunk_s * SAMPLE_RATE / BLOCK_SIZE)
-        rms_silence_threshold = 0.01
+        rms_silence_threshold = self._calibrate_noise_floor()
 
         def callback(indata, frames, time_info, status):
             if self._stop_event.is_set():
