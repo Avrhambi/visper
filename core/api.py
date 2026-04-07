@@ -1,0 +1,111 @@
+"""
+core/api.py
+-----------
+Stable public API for cross-project use.
+
+    from stt_he.core.api import transcribe, stream_transcribe
+    # or after pip install -e .:
+    from stt_he import transcribe
+"""
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Callable, Optional, Union
+
+import numpy as np
+
+
+def transcribe(
+    source: Union[str, Path, np.ndarray],
+    bucket: str = "auto",
+) -> str:
+    """
+    Transcribe Hebrew speech from a file or audio array.
+
+    Parameters
+    ----------
+    source : str | Path | np.ndarray
+        File path or float32 numpy array at 16 kHz.
+    bucket : str
+        'short' (<10s), 'medium' (10-30s), 'long' (30-60s), 'extended' (>60s).
+        'auto' = detect duration and pick the correct bucket.
+
+    Returns
+    -------
+    str : Transcribed Hebrew text.
+    """
+    from core.benchmark import get_best_config
+    from core.transcriber import Transcriber
+
+    resolved_bucket = _resolve_bucket(source, bucket)
+    config = get_best_config(resolved_bucket)
+    engine = Transcriber(config)
+    result = engine.transcribe(source, bucket=resolved_bucket)
+    return result.text
+
+
+def stream_transcribe(
+    on_transcript: Callable[[str, bool], None],
+    source: Optional[Union[str, Path]] = None,
+) -> None:
+    """
+    Streaming transcription.
+
+    Parameters
+    ----------
+    on_transcript : callable(text: str, is_final: bool)
+        Called for each transcribed chunk.
+        is_final=True = silence-gated (complete thought).
+        is_final=False = mid-speech forced emit.
+    source : str | Path | None
+        None = microphone live mode.
+        File path = file streaming mode (incremental output).
+    """
+    from core.benchmark import get_best_config
+    from core.streamer import LiveStreamer
+
+    config = get_best_config("streaming")
+    streamer = LiveStreamer(on_transcript=on_transcript, config=config, source=source)
+    streamer.start()
+    try:
+        import time
+        while streamer.is_running:
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        streamer.stop()
+
+
+def _resolve_bucket(source, bucket: str) -> str:
+    if bucket != "auto":
+        return bucket
+    duration = _get_duration(source)
+    if duration is None:
+        return "medium"
+    if duration < 10:
+        return "short"
+    if duration < 30:
+        return "medium"
+    if duration < 60:
+        return "long"
+    return "extended"
+
+
+def _get_duration(source) -> Optional[float]:
+    if isinstance(source, np.ndarray):
+        return len(source) / 16000.0
+    try:
+        import soundfile as sf
+        info = sf.info(str(source))
+        return info.duration
+    except Exception:
+        pass
+    try:
+        from mutagen import File as MutagenFile
+        f = MutagenFile(str(source))
+        if f and f.info:
+            return float(f.info.length)
+    except Exception:
+        pass
+    return None

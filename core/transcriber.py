@@ -1,0 +1,381 @@
+"""
+core/transcriber.py
+-------------------
+Unified transcription engine. Accepts a config dict from benchmark.get_best_config().
+Dispatches to faster-whisper (CPU/CUDA) or openvino_genai backend.
+Whisper parameters are resolved per-call via core.params.
+"""
+from __future__ import annotations
+
+import gc
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional, Union
+
+import numpy as np
+
+ROOT = Path(__file__).parent.parent
+MODEL_ID = "ivrit-ai/whisper-large-v3-turbo-ct2"
+OV_MODEL_DIR = "ov_model"
+
+
+@dataclass
+class TranscriptResult:
+    text: str
+    segments: list
+    audio_duration: float
+    elapsed: float
+    rtf: float
+    config_label: str
+    backend: str
+    tier_used: str
+    whisper_params: dict
+
+
+class Transcriber:
+    def __init__(self, config: dict):
+        """
+        config dict from benchmark.get_best_config(bucket).
+        Keys: device, compute_type, cpu_threads, num_workers.
+        For OpenVINO: also openvino_device.
+        Optional: venv_path — if present, inference runs inside a venv worker subprocess.
+
+        Applies resource profile before loading the backend.
+        """
+        from core.resource import apply_profile, check_memory_headroom
+        config = apply_profile(config)
+        config = check_memory_headroom(config)
+        self._config = config
+        self._backend_type = config["device"]
+        self._config_label = self._make_label(config)
+        self._first_call = True
+        self._worker_proc: Optional[subprocess.Popen] = None
+
+        os.environ["OMP_NUM_THREADS"] = str(config.get("cpu_threads", 4))
+        os.environ["MKL_NUM_THREADS"] = str(config.get("cpu_threads", 4))
+
+        venv_path = config.get("venv_path")
+        if venv_path and Path(venv_path).exists():
+            self._backend = None
+            self._worker_proc = self._spawn_worker(config, Path(venv_path))
+            if self._worker_proc is None:
+                # Worker failed to start — fall back to direct load
+                print("[Transcriber] Worker spawn failed, loading directly.", file=sys.stderr)
+                self._load_direct(config)
+        else:
+            self._load_direct(config)
+
+    def _load_direct(self, config: dict) -> None:
+        print(f"[Transcriber] Loading model: {MODEL_ID} ({self._config_label})...", file=sys.stderr)
+        t0 = time.time()
+        self._backend = self._load_backend(config)
+        elapsed = time.time() - t0
+        print(f"[Transcriber] Model ready ({elapsed:.1f}s load)", file=sys.stderr)
+
+    def _spawn_worker(self, config: dict, venv_path: Path) -> Optional[subprocess.Popen]:
+        """Spawn worker.py inside the device venv. Returns the Popen handle or None."""
+        if sys.platform == "win32":
+            py = venv_path / "Scripts" / "python.exe"
+        else:
+            py = venv_path / "bin" / "python"
+
+        if not py.exists():
+            print(f"[Transcriber] venv python not found at {py}", file=sys.stderr)
+            return None
+
+        worker_script = Path(__file__).parent / "worker.py"
+        worker_config = {**self._config, "model_id": MODEL_ID, "root": str(ROOT)}
+
+        print(f"[Transcriber] Spawning venv worker ({self._config_label})...", file=sys.stderr)
+        t0 = time.time()
+        try:
+            proc = subprocess.Popen(
+                [str(py), str(worker_script), json.dumps(worker_config)],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=None,   # worker stderr flows to our terminal
+                text=True,
+                bufsize=1,     # line-buffered
+            )
+            ready_line = proc.stdout.readline()
+            if not ready_line:
+                proc.terminate()
+                print("[Transcriber] Worker produced no ready signal.", file=sys.stderr)
+                return None
+            ready = json.loads(ready_line.strip())
+            if ready.get("status") != "ready":
+                proc.terminate()
+                print(f"[Transcriber] Worker startup failed: {ready}", file=sys.stderr)
+                return None
+            elapsed = time.time() - t0
+            print(f"[Transcriber] Worker ready ({elapsed:.1f}s)", file=sys.stderr)
+            return proc
+        except Exception as e:
+            print(f"[Transcriber] Failed to spawn worker: {e}", file=sys.stderr)
+            return None
+
+    @staticmethod
+    def _make_label(config: dict) -> str:
+        device = config.get("device", "cpu")
+        if device == "openvino":
+            return f"OpenVINO {config.get('openvino_device', 'CPU')}"
+        return f"{device.upper()} {config.get('compute_type', '')}"
+
+    def _load_backend(self, config: dict):
+        device = config["device"]
+        if device in ("cpu", "cuda"):
+            from faster_whisper import WhisperModel
+            return WhisperModel(
+                MODEL_ID,
+                device=device,
+                compute_type=config["compute_type"],
+                cpu_threads=config.get("cpu_threads", 4),
+                num_workers=config.get("num_workers", 1),
+            )
+        elif device == "openvino":
+            try:
+                import openvino_genai as ov_genai
+            except ImportError:
+                raise RuntimeError(
+                    "openvino_genai is not installed. "
+                    "Install it or re-run the benchmark to select a different config."
+                )
+            ov_model_dir = ROOT / OV_MODEL_DIR
+            if not ov_model_dir.exists():
+                raise RuntimeError(
+                    f"OpenVINO model not found at {ov_model_dir}. "
+                    "Run tests/test_openvino.py to convert the model first."
+                )
+            return ov_genai.WhisperPipeline(
+                str(ov_model_dir),
+                device=config.get("openvino_device", "CPU"),
+            )
+        else:
+            raise RuntimeError(f"Unknown device in config: {device!r}")
+
+    def transcribe(
+        self,
+        source: Union[str, Path, np.ndarray],
+        bucket: str = "medium",
+    ) -> TranscriptResult:
+        """
+        source: file path or float32 numpy array at 16 kHz.
+        bucket: duration hint for params selection.
+        """
+        from core.params import get_params
+        import yaml
+
+        params = get_params(bucket, self._config)
+
+        # Load VAD settings from config.yaml
+        vad_filter = True
+        vad_min_silence_ms = 300
+        vad_speech_pad_ms = 200
+        try:
+            cfg_path = ROOT / "config.yaml"
+            if cfg_path.exists():
+                user_cfg = yaml.safe_load(cfg_path.read_text()) or {}
+                vad_filter = user_cfg.get("vad_filter", True)
+                vad_min_silence_ms = user_cfg.get("vad_min_silence_ms", 300)
+                vad_speech_pad_ms = user_cfg.get("vad_speech_pad_ms", 200)
+        except Exception:
+            pass
+
+        if self._worker_proc is not None:
+            return self._transcribe_via_worker(source, bucket, params,
+                                               vad_filter, vad_min_silence_ms,
+                                               vad_speech_pad_ms)
+
+        t0 = time.time()
+
+        if self._backend_type in ("cpu", "cuda"):
+            audio = self._resolve_source(source)
+            audio_duration = len(audio) / 16000.0 if isinstance(audio, np.ndarray) else self._get_duration(source)
+
+            kwargs = params.as_transcribe_kwargs()
+            kwargs["language"] = "he"
+            kwargs["vad_filter"] = vad_filter
+            kwargs["vad_parameters"] = dict(
+                min_silence_duration_ms=vad_min_silence_ms,
+                speech_pad_ms=vad_speech_pad_ms,
+            )
+
+            segs, info = self._backend.transcribe(audio, **kwargs)
+            seg_list = list(segs)
+            text = "".join(s.text for s in seg_list).strip()
+            segments = [{"start": s.start, "end": s.end, "text": s.text} for s in seg_list]
+            if not isinstance(audio, np.ndarray):
+                audio_duration = info.duration
+
+        elif self._backend_type == "openvino":
+            import openvino_genai as ov_genai
+            audio = self._to_array(source)
+            audio_duration = len(audio) / 16000.0
+
+            gen_config = ov_genai.WhisperGenerateConfig()
+            gen_config.language = "<|he|>"
+            gen_config.beam_size = params.beam_size
+            gen_config.return_timestamps = not params.without_timestamps
+            result = self._backend.generate(audio, gen_config)
+            text = result.texts[0].strip() if result.texts else ""
+            segments = []
+            if not params.without_timestamps and hasattr(result, "chunks") and result.chunks:
+                segments = [
+                    {"start": c.timestamps.begin, "end": c.timestamps.end, "text": c.text}
+                    for c in result.chunks
+                ]
+        else:
+            raise RuntimeError(f"Unknown backend: {self._backend_type}")
+
+        elapsed = time.time() - t0
+        rtf = elapsed / audio_duration if audio_duration > 0 else 0.0
+
+        return TranscriptResult(
+            text=text,
+            segments=segments,
+            audio_duration=audio_duration,
+            elapsed=round(elapsed, 3),
+            rtf=round(rtf, 4),
+            config_label=self._config_label,
+            backend="faster-whisper" if self._backend_type in ("cpu", "cuda") else "openvino_genai",
+            tier_used=params.tier_used,
+            whisper_params=params.as_transcribe_kwargs(),
+        )
+
+    def _transcribe_via_worker(
+        self, source, bucket: str, params, vad_filter: bool,
+        vad_min_silence_ms: int, vad_speech_pad_ms: int,
+    ) -> TranscriptResult:
+        """Send a transcription request to the venv worker subprocess."""
+        t0 = time.time()
+        temp_npy: Optional[str] = None
+
+        if isinstance(source, np.ndarray):
+            # Write numpy array to a temp file the worker can read
+            fd, temp_npy = tempfile.mkstemp(suffix=".npy")
+            os.close(fd)
+            np.save(temp_npy, source.astype(np.float32))
+            audio_path = temp_npy
+            fallback_duration = len(source) / 16000.0
+        else:
+            audio_path = str(source)
+            fallback_duration = self._get_duration(source)
+
+        kwargs = params.as_transcribe_kwargs()
+        kwargs["language"] = "he"
+        kwargs["language_token"] = "<|he|>"
+        kwargs["vad_filter"] = vad_filter
+        kwargs["vad_parameters"] = dict(
+            min_silence_duration_ms=vad_min_silence_ms,
+            speech_pad_ms=vad_speech_pad_ms,
+        )
+
+        request = json.dumps({
+            "action":     "transcribe",
+            "audio_path": audio_path,
+            "params":     kwargs,
+            "bucket":     bucket,
+        })
+
+        try:
+            self._worker_proc.stdin.write(request + "\n")
+            self._worker_proc.stdin.flush()
+            response_line = self._worker_proc.stdout.readline()
+        except Exception as e:
+            if temp_npy:
+                try:
+                    Path(temp_npy).unlink()
+                except Exception:
+                    pass
+            raise RuntimeError(f"Worker communication error: {e}") from e
+
+        # Worker deletes the .npy file itself; clean up here only on error path
+        if not response_line:
+            if temp_npy:
+                try:
+                    Path(temp_npy).unlink()
+                except Exception:
+                    pass
+            raise RuntimeError("Worker closed stdout unexpectedly")
+
+        try:
+            response = json.loads(response_line.strip())
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"Worker returned invalid JSON: {e}") from e
+
+        if response.get("status") != "ok":
+            raise RuntimeError(f"Worker error: {response.get('error', 'unknown')}")
+
+        elapsed = time.time() - t0
+        audio_duration = response.get("audio_duration", fallback_duration)
+        rtf = elapsed / audio_duration if audio_duration > 0 else 0.0
+
+        return TranscriptResult(
+            text=response["text"],
+            segments=response.get("segments", []),
+            audio_duration=audio_duration,
+            elapsed=round(elapsed, 3),
+            rtf=round(rtf, 4),
+            config_label=self._config_label,
+            backend=f"venv-worker/{self._backend_type}",
+            tier_used=params.tier_used,
+            whisper_params=kwargs,
+        )
+
+    def _resolve_source(self, source) -> Union[np.ndarray, str]:
+        """For faster-whisper: arrays pass through; paths pass through as strings."""
+        if isinstance(source, np.ndarray):
+            return source
+        return str(source)
+
+    def _to_array(self, source) -> np.ndarray:
+        """Convert file path or array to float32 numpy array at 16kHz."""
+        if isinstance(source, np.ndarray):
+            return source.astype(np.float32)
+        import soundfile as sf
+        audio, sr = sf.read(str(source), dtype="float32")
+        if audio.ndim > 1:
+            audio = audio[:, 0]
+        if sr != 16000:
+            import librosa
+            audio = librosa.resample(audio, orig_sr=sr, target_sr=16000)
+        return audio
+
+    def _get_duration(self, source) -> float:
+        try:
+            import soundfile as sf
+            info = sf.info(str(source))
+            return info.duration
+        except Exception:
+            return 0.0
+
+    def unload(self) -> None:
+        """Explicitly unload model and free memory."""
+        if self._worker_proc is not None:
+            try:
+                self._worker_proc.stdin.write(
+                    json.dumps({"action": "quit"}) + "\n"
+                )
+                self._worker_proc.stdin.flush()
+                self._worker_proc.wait(timeout=5)
+            except Exception:
+                self._worker_proc.terminate()
+            self._worker_proc = None
+
+        if self._backend is not None:
+            del self._backend
+            self._backend = None
+
+        gc.collect()
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except ImportError:
+            pass
