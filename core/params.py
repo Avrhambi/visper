@@ -241,3 +241,46 @@ def describe_params(params: WhisperParams) -> str:
     return (f"{params.tier_used} tier — beam={params.beam_size} "
             f"best_of={params.best_of} temp={params.temperature} "
             f"prev_text={params.condition_on_prev_text}")
+
+
+# ---------------------------------------------------------------------------
+# Confidence-gated retry helpers
+# ---------------------------------------------------------------------------
+
+_TIER_UPGRADE = {"fast": "balanced", "balanced": "accurate", "accurate": None}
+
+
+def next_tier(tier: str) -> Optional[str]:
+    """Return the next higher accuracy tier, or None if already at maximum."""
+    return _TIER_UPGRADE.get(tier)
+
+
+def get_params_for_tier(tier: str, bucket: str, hw_config: dict) -> WhisperParams:
+    """
+    Return WhisperParams for a specific tier without going through auto-selection.
+    Used by the confidence-gated retry path in Transcriber.
+    Respects the condition_on_prev_text=False invariant for streaming/short buckets.
+    """
+    tier = tier if tier in TIERS else "fast"
+    tier_def = TIERS[tier]
+    per_bucket = tier_def["per_bucket"].get(bucket, tier_def["per_bucket"].get("medium", {}))
+
+    params = WhisperParams(
+        beam_size=tier_def["beam_size"],
+        best_of=tier_def["best_of"],
+        temperature=tier_def["temperature"],
+        patience=tier_def["patience"],
+        condition_on_prev_text=per_bucket.get("condition_on_prev_text", False),
+        without_timestamps=per_bucket.get("without_timestamps", True),
+        compression_ratio_threshold=tier_def["compression_ratio_threshold"],
+        log_prob_threshold=tier_def["log_prob_threshold"],
+        no_speech_threshold=tier_def["no_speech_threshold"],
+        tier_used=tier,
+        auto_selected=False,
+    )
+
+    # Hard rule: streaming/short must never have condition_on_prev_text=True
+    if bucket in ("streaming", "short"):
+        params.condition_on_prev_text = False
+
+    return params

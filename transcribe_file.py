@@ -97,7 +97,13 @@ def transcribe_one(path: Path, engine, args, cfg: dict) -> str:
     fmt = args.output or cfg.get("output_format", "txt")
 
     print(f"[STT] Transcribing {path.name} (bucket={bucket})...", file=sys.stderr)
-    result = engine.transcribe(source=path, bucket=bucket)
+
+    if getattr(args, "progress", False):
+        def _progress_cb(seg: dict) -> None:
+            print(f"  [{seg['start']:.1f}s] {seg['text'].strip()}", file=sys.stderr)
+        result = engine.transcribe(source=path, bucket=bucket, on_segment=_progress_cb)
+    else:
+        result = engine.transcribe(source=path, bucket=bucket)
     print(f"[STT] Done — RTF {result.rtf:.3f} ({result.audio_duration:.1f}s audio / {result.elapsed:.1f}s inference)",
           file=sys.stderr)
 
@@ -143,6 +149,8 @@ def main():
                         help="Print only, don't write output file")
     parser.add_argument("--clip", action="store_true",
                         help="Copy result to clipboard")
+    parser.add_argument("--progress", "-p", action="store_true",
+                        help="Print each segment to stderr as it is decoded (shows progress on long files)")
     parser.add_argument("--background", action="store_true",
                         help="Run as background process (silent stdout)")
     args = parser.parse_args()

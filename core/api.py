@@ -15,6 +15,39 @@ from typing import Callable, Optional, Union
 import numpy as np
 
 
+def transcribe_chunked(
+    source: Union[str, Path, np.ndarray],
+    on_segment: Callable[[dict], None],
+    bucket: str = "auto",
+) -> str:
+    """
+    Like transcribe() but calls on_segment({"start", "end", "text"}) for each
+    Whisper segment as it is decoded, enabling progress feedback on long files.
+
+    Parameters
+    ----------
+    source : str | Path | np.ndarray
+        File path or float32 numpy array at 16 kHz.
+    on_segment : callable(seg: dict)
+        Called once per decoded segment with keys 'start', 'end', 'text'.
+        Runs on the calling thread (blocking, single-threaded).
+    bucket : str
+        'auto' = detect duration and pick the correct bucket.
+
+    Returns
+    -------
+    str : Full transcribed text.
+    """
+    from core.benchmark import get_best_config
+    from core.transcriber import Transcriber
+
+    resolved_bucket = _resolve_bucket(source, bucket)
+    config = get_best_config(resolved_bucket)
+    engine = Transcriber(config)
+    result = engine.transcribe(source, bucket=resolved_bucket, on_segment=on_segment)
+    return result.text
+
+
 def transcribe(
     source: Union[str, Path, np.ndarray],
     bucket: str = "auto",
