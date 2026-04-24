@@ -289,7 +289,8 @@ class Transcriber:
             seg_list = []   # raw Segment objects (needed for avg_logprob)
             segments = []   # dicts for TranscriptResult
             for s in segs_gen:
-                seg_dict = {"start": s.start, "end": s.end, "text": s.text}
+                seg_dict = {"start": s.start, "end": s.end, "text": s.text,
+                            "confidence": round(float(s.avg_logprob), 3)}
                 seg_list.append(s)
                 segments.append(seg_dict)
                 if on_segment is not None:
@@ -319,7 +320,8 @@ class Transcriber:
                     )
                     segs2, info = self._backend.transcribe(audio, **kwargs2)
                     seg_list = list(segs2)
-                    segments = [{"start": s.start, "end": s.end, "text": s.text}
+                    segments = [{"start": s.start, "end": s.end, "text": s.text,
+                                 "confidence": round(float(s.avg_logprob), 3)}
                                 for s in seg_list]
                     text = "".join(s.text for s in seg_list).strip()
 

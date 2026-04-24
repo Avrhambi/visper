@@ -1,4 +1,4 @@
-# setup.py
+# install.py
 import subprocess
 import sys
 import os
@@ -243,7 +243,8 @@ if __name__ == "__main__":
         print("[Setup] Benchmark results found — skipping benchmark.\n")
 
     print("\n[Setup] Done.\n")
-    print("  Offline transcription:   python transcribe_file.py audio.mp3")
-    print("  Live/streaming:          python transcribe_live.py")
-    print("  Re-benchmark:            python run_benchmark.py --force")
+    print("  Offline transcription:   stt-file audio.mp3          (or: python transcribe_file.py audio.mp3)")
+    print("  Live/streaming:          stt-live                    (or: python transcribe_live.py)")
+    print("  Re-benchmark:            stt-benchmark --force       (or: python run_benchmark.py --force)")
+    print("  FastAPI server:          stt-server                  (requires: pip install -e \".[server]\")")
     print()

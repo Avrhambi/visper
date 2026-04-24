@@ -148,7 +148,8 @@ def _transcribe(model, audio, config: dict, params: dict):
         segs, _ = model.transcribe(audio, **transcribe_kwargs)
         seg_list = list(segs)
         text = "".join(s.text for s in seg_list).strip()
-        segments = [{"start": s.start, "end": s.end, "text": s.text} for s in seg_list]
+        segments = [{"start": s.start, "end": s.end, "text": s.text,
+                     "confidence": round(float(s.avg_logprob), 3)} for s in seg_list]
 
     elif device == "openvino":
         import openvino_genai as ov_genai
