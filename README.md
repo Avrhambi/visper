@@ -46,6 +46,7 @@ stt-live                               # microphone transcription
 stt-live --file audio.mp3             # file streaming mode
 stt-live --output result.txt          # save accumulated transcript
 stt-live --clip                       # copy to clipboard on Ctrl+C
+stt-live --progress                   # print each segment with timestamp as it arrives
 ```
 
 If the CLI entry points aren't on PATH yet (before `pip install -e .`):
