@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="he">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Local STT — Hebrew</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f0f2f5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+      color: #1a1a1a;
+    }
+    .card {
+      background: white;
+      border-radius: 14px;
+      padding: 2rem;
+      width: 100%;
+      max-width: 680px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.08);
+    }
+    h1 { font-size: 1.3rem; font-weight: 600; margin-bottom: .4rem; }
+    .health {
+      font-size: .8rem;
+      color: #888;
+      margin-bottom: 1.75rem;
+      display: flex;
+      align-items: center;
+      gap: .4rem;
+    }
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #ccc;
+      flex-shrink: 0;
+    }
+    .dot.ok { background: #3cb043; }
+    .dot.err { background: #e04040; }
+
+    .upload-area {
+      border: 2px dashed #d0d5dd;
+      border-radius: 10px;
+      padding: 1.75rem 1rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .15s, background .15s;
+      margin-bottom: 1rem;
+      user-select: none;
+    }
+    .upload-area:hover { border-color: #4a90e2; background: #f5f9ff; }
+    .upload-area.dragover { border-color: #4a90e2; background: #eef4ff; }
+    .upload-area input { display: none; }
+    .upload-label { font-size: .95rem; color: #555; }
+    .file-name { margin-top: .4rem; font-size: .85rem; color: #4a90e2; font-weight: 500; min-height: 1.2rem; }
+
+    .buttons { display: flex; gap: .75rem; margin-bottom: 1.25rem; }
+    button {
+      flex: 1;
+      padding: .7rem;
+      border: none;
+      border-radius: 8px;
+      font-size: .9rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity .15s, background .15s;
+    }
+    button:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-full { background: #4a90e2; color: white; }
+    .btn-full:not(:disabled):hover { background: #357abd; }
+    .btn-stream { background: #2d8a4e; color: white; }
+    .btn-stream:not(:disabled):hover { background: #1f6438; }
+
+    .status {
+      font-size: .82rem;
+      color: #888;
+      margin-bottom: .6rem;
+      min-height: 1.1rem;
+    }
+
+    .result-box {
+      background: #fafafa;
+      border: 1px solid #e8e8e8;
+      border-radius: 10px;
+      padding: 1.25rem;
+      min-height: 130px;
+      font-size: 1.05rem;
+      line-height: 1.75;
+      direction: rtl;
+      text-align: right;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .result-box.placeholder { color: #bbb; font-style: italic; font-size: .9rem; }
+
+    .meta {
+      font-size: .78rem;
+      color: #aaa;
+      margin-top: .6rem;
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Local STT — Hebrew</h1>
+    <div class="health">
+      <div class="dot" id="dot"></div>
+      <span id="healthText">Connecting to server...</span>
+    </div>
+
+    <div class="upload-area" id="uploadArea">
+      <input type="file" id="fileInput" accept="audio/*">
+      <div class="upload-label">Click or drag an audio file here</div>
+      <div class="file-name" id="fileName"></div>
+    </div>
+
+    <div class="buttons">
+      <button class="btn-full" id="btnFull" disabled onclick="transcribe()">Transcribe</button>
+      <button class="btn-stream" id="btnStream" disabled onclick="transcribeStream()">Stream</button>
+    </div>
+
+    <div class="status" id="status"></div>
+    <div class="result-box placeholder" id="result">Transcript will appear here…</div>
+    <div class="meta" id="meta"></div>
+  </div>
+
+  <script>
+    const API = "http://localhost:8000";
+
+    const fileInput  = document.getElementById("fileInput");
+    const fileName   = document.getElementById("fileName");
+    const btnFull    = document.getElementById("btnFull");
+    const btnStream  = document.getElementById("btnStream");
+    const statusEl   = document.getElementById("status");
+    const resultEl   = document.getElementById("result");
+    const metaEl     = document.getElementById("meta");
+    const dot        = document.getElementById("dot");
+    const healthText = document.getElementById("healthText");
+
+    // ── Health check ─────────────────────────────────────────────────────────
+    async function checkHealth() {
+      try {
+        const r = await fetch(`${API}/health`);
+        const d = await r.json();
+        if (d.status === "ok") {
+          dot.className = "dot ok";
+          healthText.textContent = `Ready — ${d.device} · ${d.compute_type}`;
+        } else {
+          dot.className = "dot err";
+          healthText.textContent = "Server error: " + d.error;
+        }
+      } catch {
+        dot.className = "dot err";
+        healthText.textContent = "Server not reachable — run: stt-server";
+      }
+    }
+    checkHealth();
+
+    // ── File selection ────────────────────────────────────────────────────────
+    uploadArea.addEventListener("click", () => fileInput.click());
+
+    fileInput.addEventListener("change", () => {
+      const f = fileInput.files[0];
+      if (!f) return;
+      fileName.textContent = f.name;
+      btnFull.disabled = false;
+      btnStream.disabled = false;
+      clearResult();
+    });
+
+    uploadArea.addEventListener("dragover", e => {
+      e.preventDefault();
+      uploadArea.classList.add("dragover");
+    });
+    uploadArea.addEventListener("dragleave", () => uploadArea.classList.remove("dragover"));
+    uploadArea.addEventListener("drop", e => {
+      e.preventDefault();
+      uploadArea.classList.remove("dragover");
+      const f = e.dataTransfer.files[0];
+      if (!f) return;
+      const dt = new DataTransfer();
+      dt.items.add(f);
+      fileInput.files = dt.files;
+      fileInput.dispatchEvent(new Event("change"));
+    });
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    function setLoading(on) {
+      btnFull.disabled = on;
+      btnStream.disabled = on;
+    }
+
+    function clearResult() {
+      resultEl.className = "result-box placeholder";
+      resultEl.textContent = "Transcript will appear here…";
+      metaEl.textContent = "";
+      statusEl.textContent = "";
+    }
+
+    function showResult(text) {
+      resultEl.className = "result-box";
+      resultEl.textContent = text || "(empty result)";
+    }
+
+    // ── Full transcription ────────────────────────────────────────────────────
+    async function transcribe() {
+      const file = fileInput.files[0];
+      if (!file) return;
+      setLoading(true);
+      statusEl.textContent = "Transcribing…";
+      resultEl.className = "result-box placeholder";
+      resultEl.textContent = "Working…";
+      metaEl.textContent = "";
+
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        const t0 = Date.now();
+        const r = await fetch(`${API}/transcribe`, { method: "POST", body: fd });
+        if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+        const d = await r.json();
+        showResult(d.text);
+        const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+        metaEl.textContent = [
+          d.rtf != null ? `RTF ${d.rtf}` : null,
+          `${elapsed}s`,
+          d.segments?.length ? `${d.segments.length} segments` : null,
+        ].filter(Boolean).join(" · ");
+        statusEl.textContent = "Done.";
+      } catch (e) {
+        statusEl.textContent = "Error: " + e.message;
+        resultEl.className = "result-box placeholder";
+        resultEl.textContent = "";
+      }
+      setLoading(false);
+    }
+
+    // ── Streaming transcription ───────────────────────────────────────────────
+    async function transcribeStream() {
+      const file = fileInput.files[0];
+      if (!file) return;
+      setLoading(true);
+      statusEl.textContent = "Streaming…";
+      resultEl.className = "result-box";
+      resultEl.textContent = "";
+      metaEl.textContent = "";
+      let segCount = 0;
+
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        const r = await fetch(`${API}/transcribe/stream`, { method: "POST", body: fd });
+        if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+
+        const reader = r.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop();
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            try {
+              const d = JSON.parse(line.slice(6));
+              if (d.error) { statusEl.textContent = "Error: " + d.error; break; }
+              resultEl.textContent += (resultEl.textContent ? " " : "") + d.text;
+              segCount++;
+              statusEl.textContent = `Streaming… (${segCount} segment${segCount !== 1 ? "s" : ""})`;
+            } catch {}
+          }
+        }
+        statusEl.textContent = `Done — ${segCount} segments.`;
+        metaEl.textContent = `${segCount} segments streamed`;
+      } catch (e) {
+        statusEl.textContent = "Error: " + e.message;
+      }
+      setLoading(false);
+    }
+  </script>
+</body>
+</html>
