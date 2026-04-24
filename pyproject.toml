@@ -29,13 +29,10 @@ server = [
 ]
 
 [project.scripts]
-stt-file      = "transcribe_file:main"
-stt-live      = "transcribe_live:main"
-stt-benchmark = "run_benchmark:main"
-stt-server    = "server:main"
-
-[tool.setuptools]
-py_modules = ["server", "transcribe_file", "transcribe_live", "run_benchmark"]
+stt-file      = "local_stt_he._cli:file"
+stt-live      = "local_stt_he._cli:live"
+stt-benchmark = "local_stt_he._cli:benchmark"
+stt-server    = "local_stt_he.server:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
