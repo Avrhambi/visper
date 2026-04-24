@@ -9,7 +9,7 @@ Model: [`ivrit-ai/whisper-large-v3-turbo-ct2`](https://huggingface.co/ivrit-ai/w
 ## Quick Start
 
 ```bash
-git clone https://github.com/Avrhambi/local-whisper-he && cd local-whisper-he
+git clone https://github.com/Avrhambi/local-stt-he && cd local-stt-he
 python install.py           # installs deps, downloads model (~1.5 GB once), runs benchmark
 stt-file audio.mp3          # or: python transcribe_file.py audio.mp3
 ```
