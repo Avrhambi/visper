@@ -223,8 +223,8 @@ def main():
 
     cfg = _load_config()
 
-    from core.benchmark import get_best_config
-    from core.transcriber import Transcriber
+    from local_stt_he.benchmark import get_best_config
+    from local_stt_he.transcriber import Transcriber
 
     first_path = Path(args.files[0])
     first_bucket = _resolve_bucket(first_path, args.bucket)

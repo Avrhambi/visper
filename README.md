@@ -67,7 +67,7 @@ pip install -e .
 ```
 
 ```python
-from core.api import transcribe, stream_transcribe, transcribe_chunked
+from local_stt_he import transcribe, stream_transcribe, transcribe_chunked
 
 # Offline — returns full transcript text
 text = transcribe("audio.mp3")
@@ -181,23 +181,23 @@ RTF budget = 0.85 (1.0 = real-time). WER = 0.179, CER = 0.084 on 221 Hebrew file
 ## Project Structure
 
 ```
-core/benchmark.py      ← hardware detection, candidate selection, fallback chain
-core/resource.py       ← resource profile enforcement (threads, GPU, VRAM guard, priority)
-core/params.py         ← Whisper parameter selection per bucket/tier
-core/transcriber.py    ← dispatches to faster-whisper or openvino_genai; walks fallback chain
-core/api.py            ← public API: transcribe(), stream_transcribe(), transcribe_chunked()
-core/streamer.py       ← VAD-gated live transcription with sliding window overlap
-core/postprocess.py    ← Hebrew text normalization
-core/constants.py      ← audio constants (SAMPLE_RATE, CHANNELS, BLOCK_SIZE, DTYPE)
-transcribe_file.py     ← CLI offline transcription
-transcribe_live.py     ← CLI live/streaming transcription
-server.py              ← FastAPI server (pip install -e ".[server]")
-run_benchmark.py       ← benchmark entry point
-install.py             ← first-run setup: installs deps, downloads model, runs benchmark
-config.yaml            ← user-tunable parameters (committed)
-benchmark_results.json ← auto-generated, never hand-edited (gitignored)
-records/               ← Hebrew audio files used as benchmark inputs
-tests/                 ← standalone hardware validation scripts
+local_stt_he/benchmark.py   ← hardware detection, candidate selection, fallback chain
+local_stt_he/resource.py    ← resource profile enforcement (threads, GPU, VRAM guard, priority)
+local_stt_he/params.py      ← Whisper parameter selection per bucket/tier
+local_stt_he/transcriber.py ← dispatches to faster-whisper or openvino_genai; walks fallback chain
+local_stt_he/api.py         ← public API: transcribe(), stream_transcribe(), transcribe_chunked()
+local_stt_he/streamer.py    ← VAD-gated live transcription with sliding window overlap
+local_stt_he/postprocess.py ← Hebrew text normalization
+local_stt_he/constants.py   ← audio constants (SAMPLE_RATE, CHANNELS, BLOCK_SIZE, DTYPE)
+transcribe_file.py           ← CLI offline transcription
+transcribe_live.py           ← CLI live/streaming transcription
+server.py                    ← FastAPI server (pip install -e ".[server]")
+run_benchmark.py             ← benchmark entry point
+install.py                   ← first-run setup: installs deps, downloads model, runs benchmark
+config.yaml                  ← user-tunable parameters (committed)
+benchmark_results.json       ← auto-generated, never hand-edited (gitignored)
+records/                     ← Hebrew audio files used as benchmark inputs
+tests/                       ← standalone hardware validation scripts
 ```
 
 ---

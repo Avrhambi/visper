@@ -55,8 +55,8 @@ def main():
                 sys.exit(0)
         sys.stdout = open(os.devnull, "w")
 
-    from core.benchmark import get_best_config
-    from core.streamer import LiveStreamer
+    from local_stt_he.benchmark import get_best_config
+    from local_stt_he.streamer import LiveStreamer
 
     config = get_best_config("streaming")
     source = Path(args.file) if args.file else None

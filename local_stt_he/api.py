@@ -1,11 +1,9 @@
 """
-core/api.py
------------
+local_stt_he/api.py
+--------------------
 Stable public API for cross-project use.
 
-    from stt_he.core.api import transcribe, stream_transcribe
-    # or after pip install -e .:
-    from stt_he import transcribe
+    from local_stt_he import transcribe, stream_transcribe, transcribe_chunked
 """
 from __future__ import annotations
 
@@ -38,8 +36,8 @@ def transcribe_chunked(
     -------
     str : Full transcribed text.
     """
-    from core.benchmark import get_best_config
-    from core.transcriber import Transcriber
+    from local_stt_he.benchmark import get_best_config
+    from local_stt_he.transcriber import Transcriber
 
     resolved_bucket = _resolve_bucket(source, bucket)
     config = get_best_config(resolved_bucket)
@@ -67,8 +65,8 @@ def transcribe(
     -------
     str : Transcribed Hebrew text.
     """
-    from core.benchmark import get_best_config
-    from core.transcriber import Transcriber
+    from local_stt_he.benchmark import get_best_config
+    from local_stt_he.transcriber import Transcriber
 
     resolved_bucket = _resolve_bucket(source, bucket)
     config = get_best_config(resolved_bucket)
@@ -94,8 +92,8 @@ def stream_transcribe(
         None = microphone live mode.
         File path = file streaming mode (incremental output).
     """
-    from core.benchmark import get_best_config
-    from core.streamer import LiveStreamer
+    from local_stt_he.benchmark import get_best_config
+    from local_stt_he.streamer import LiveStreamer
 
     config = get_best_config("streaming")
     streamer = LiveStreamer(on_transcript=on_transcript, config=config, source=source)

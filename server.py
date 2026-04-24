@@ -37,7 +37,7 @@ async def _save_upload(file: UploadFile) -> pathlib.Path:
 @app.get("/health")
 def health():
     try:
-        from core.benchmark import get_best_config
+        from local_stt_he.benchmark import get_best_config
         cfg = get_best_config("medium")
         return {
             "status": "ok",
@@ -53,7 +53,7 @@ async def transcribe_endpoint(file: UploadFile = File(...)):
     tmp_path = await _save_upload(file)
     try:
         import soundfile as sf
-        from core.api import transcribe_chunked
+        from local_stt_he.api import transcribe_chunked
 
         try:
             audio_duration = sf.info(str(tmp_path)).duration
@@ -86,7 +86,7 @@ async def transcribe_stream(file: UploadFile = File(...)):
 
     def _run() -> None:
         try:
-            from core.api import stream_transcribe
+            from local_stt_he.api import stream_transcribe
             stream_transcribe(on_transcript, str(tmp_path))
         except Exception as e:
             q.put({"error": str(e)})

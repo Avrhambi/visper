@@ -178,7 +178,7 @@ def install_requirements():
 
 def run_benchmark_with_timeout(timeout_seconds: int = 180):
     """Run fast benchmark with a timeout. Falls back to --quick mode if it takes too long."""
-    from core.benchmark import run_fast_benchmark, run_benchmark
+    from local_stt_he.benchmark import run_fast_benchmark, run_benchmark
     result = [None]
     error = [None]
 

@@ -36,4 +36,4 @@ stt-server    = "server:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["core*"]
+include = ["local_stt_he*"]

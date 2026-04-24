@@ -792,7 +792,7 @@ def _run_candidate_in_venv(
 
     audio_files_info: {bucket: {"path": str, "target_duration": float}}
     """
-    from core.venv_manager import ensure_venv, python_exe as venv_python
+    from local_stt_he.venv_manager import ensure_venv, python_exe as venv_python
 
     device = candidate["device"]
     ensure_venv(device)

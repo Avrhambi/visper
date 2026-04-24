@@ -2,7 +2,7 @@
 """Entry point: python run_benchmark.py [--force] [--fast] [--quick] [--full]"""
 import argparse
 import json
-from core.benchmark import run_benchmark, run_fast_benchmark, RESULTS_PATH
+from local_stt_he.benchmark import run_benchmark, run_fast_benchmark, RESULTS_PATH
 
 
 def main():

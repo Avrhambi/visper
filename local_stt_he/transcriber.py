@@ -54,7 +54,7 @@ class Transcriber:
 
         Applies resource profile before loading the backend.
         """
-        from core.resource import apply_profile, check_memory_headroom, check_vram_before_load
+        from local_stt_he.resource import apply_profile, check_memory_headroom, check_vram_before_load
         config = apply_profile(config)
         config = check_memory_headroom(config)
         config = check_vram_before_load(config)
@@ -100,7 +100,7 @@ class Transcriber:
             print(f"[Transcriber] Load failed ({self._config_label}): {e}", file=sys.stderr)
 
         # Walk fallback chain from benchmark_results.json
-        from core.benchmark import RESULTS_PATH, probe_and_cache_fallback
+        from local_stt_he.benchmark import RESULTS_PATH, probe_and_cache_fallback
         fallback_chain: list[dict] = []
         if RESULTS_PATH.exists():
             try:
@@ -244,10 +244,10 @@ class Transcriber:
         """
         source: file path or float32 numpy array at 16 kHz.
         bucket: duration hint for params selection.
-        _tier_override: WhisperParams instance from core.params; bypasses auto-selection.
+        _tier_override: WhisperParams instance from local_stt_he.params; bypasses auto-selection.
                         Used by LiveStreamer for graceful degradation under queue pressure.
         """
-        from core.params import get_params
+        from local_stt_he.params import get_params
         import yaml
 
         params = _tier_override if _tier_override is not None else get_params(bucket, self._config)
@@ -306,7 +306,7 @@ class Transcriber:
                     and bucket != "streaming"
                     and seg_list
                     and not self._confidence_ok(seg_list, params.log_prob_threshold)):
-                from core.params import next_tier, get_params_for_tier
+                from local_stt_he.params import next_tier, get_params_for_tier
                 upgrade = next_tier(params.tier_used)
                 if upgrade:
                     print(f"[STT] Low confidence — retrying at '{upgrade}' tier", file=sys.stderr)
@@ -327,7 +327,7 @@ class Transcriber:
 
             # Hebrew normalization
             if self._language == "he":
-                from core.postprocess import normalize_hebrew
+                from local_stt_he.postprocess import normalize_hebrew
                 text = normalize_hebrew(text)
 
         elif self._backend_type == "openvino":
@@ -344,7 +344,7 @@ class Transcriber:
             result = self._backend.generate(audio, gen_config)
             text = result.texts[0].strip() if result.texts else ""
             if self._language == "he":
-                from core.postprocess import normalize_hebrew
+                from local_stt_he.postprocess import normalize_hebrew
                 text = normalize_hebrew(text)
             segments = []
             if not params.without_timestamps and hasattr(result, "chunks") and result.chunks:
