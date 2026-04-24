@@ -10,37 +10,40 @@
       font-family: system-ui, -apple-system, sans-serif;
       background: #f0f2f5;
       min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 2rem 1rem;
-      color: #1a1a1a;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 2rem 1rem; color: #1a1a1a;
     }
     .card {
-      background: white;
-      border-radius: 14px;
-      padding: 2rem;
-      width: 100%;
-      max-width: 680px;
-      box-shadow: 0 2px 8px rgba(0,0,0,.08);
+      background: white; border-radius: 14px; padding: 2rem;
+      width: 100%; max-width: 680px; box-shadow: 0 2px 8px rgba(0,0,0,.08);
     }
-    h1 { font-size: 1.3rem; font-weight: 600; margin-bottom: .4rem; }
-    h2 { font-size: 1rem; font-weight: 600; margin-bottom: .75rem; color: #333; }
 
-    .health {
-      font-size: .8rem; color: #888;
-      margin-bottom: 1.75rem;
-      display: flex; align-items: center; gap: .4rem;
-    }
+    /* header */
+    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.25rem; }
+    h1 { font-size: 1.3rem; font-weight: 600; }
+    .health { font-size: .78rem; color: #888; display: flex; align-items: center; gap: .4rem; }
     .dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; flex-shrink: 0; }
     .dot.ok  { background: #3cb043; }
     .dot.err { background: #e04040; }
 
-    /* ── File section ─────────────────────────────────────────── */
+    /* tabs */
+    .tabs { display: flex; gap: 0; border-bottom: 2px solid #eee; margin-bottom: 1.5rem; }
+    .tab {
+      flex: 1; padding: .65rem 1rem; border: none; background: none;
+      font-size: .92rem; font-weight: 500; color: #888; cursor: pointer;
+      border-bottom: 2px solid transparent; margin-bottom: -2px;
+      transition: color .15s, border-color .15s;
+    }
+    .tab.active { color: #4a90e2; border-bottom-color: #4a90e2; }
+    .tab:hover:not(.active) { color: #555; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* upload */
     .upload-area {
       border: 2px dashed #d0d5dd; border-radius: 10px;
-      padding: 1.75rem 1rem; text-align: center;
-      cursor: pointer; transition: border-color .15s, background .15s;
+      padding: 1.75rem 1rem; text-align: center; cursor: pointer;
+      transition: border-color .15s, background .15s;
       margin-bottom: 1rem; user-select: none;
     }
     .upload-area:hover, .upload-area.dragover { border-color: #4a90e2; background: #f5f9ff; }
@@ -48,6 +51,7 @@
     .upload-label { font-size: .95rem; color: #555; }
     .file-name { margin-top: .4rem; font-size: .85rem; color: #4a90e2; font-weight: 500; min-height: 1.2rem; }
 
+    /* buttons */
     .buttons { display: flex; gap: .75rem; margin-bottom: 1.25rem; }
     button {
       flex: 1; padding: .7rem; border: none; border-radius: 8px;
@@ -55,41 +59,34 @@
       transition: opacity .15s, background .15s;
     }
     button:disabled { opacity: .4; cursor: not-allowed; }
-    .btn-full   { background: #4a90e2; color: white; }
-    .btn-full:not(:disabled):hover   { background: #357abd; }
-    .btn-stream { background: #2d8a4e; color: white; }
-    .btn-stream:not(:disabled):hover { background: #1f6438; }
+    .btn-blue   { background: #4a90e2; color: white; }
+    .btn-blue:not(:disabled):hover   { background: #357abd; }
+    .btn-green  { background: #2d8a4e; color: white; }
+    .btn-green:not(:disabled):hover  { background: #1f6438; }
+    .btn-red    { background: #c0392b; color: white; }
+    .btn-red:not(:disabled):hover    { background: #a93226; }
+    .btn-grey   { background: #555; color: white; }
+    .btn-grey:not(:disabled):hover   { background: #333; }
 
+    /* result */
     .status { font-size: .82rem; color: #888; margin-bottom: .6rem; min-height: 1.1rem; }
-
     .result-box {
       background: #fafafa; border: 1px solid #e8e8e8; border-radius: 10px;
-      padding: 1.25rem; min-height: 100px;
+      padding: 1.25rem; min-height: 110px;
       font-size: 1.05rem; line-height: 1.75;
       direction: rtl; text-align: right;
       white-space: pre-wrap; word-break: break-word;
     }
     .result-box.placeholder { color: #bbb; font-style: italic; font-size: .9rem; }
-    .meta { font-size: .78rem; color: #aaa; margin-top: .6rem; text-align: right; }
+    .meta { font-size: .78rem; color: #aaa; margin-top: .5rem; text-align: right; }
 
-    /* ── Divider ──────────────────────────────────────────────── */
-    .divider { border: none; border-top: 1px solid #eee; margin: 1.75rem 0; }
-
-    /* ── Live section ─────────────────────────────────────────── */
-    .live-controls { display: flex; gap: .75rem; margin-bottom: 1rem; }
-    .btn-live-start { background: #c0392b; color: white; }
-    .btn-live-start:not(:disabled):hover { background: #a93226; }
-    .btn-live-stop  { background: #555; color: white; }
-    .btn-live-stop:not(:disabled):hover  { background: #333; }
-
-    .live-indicator {
-      display: flex; align-items: center; gap: .5rem;
-      font-size: .82rem; color: #888; margin-bottom: .6rem; min-height: 1.4rem;
-    }
+    /* live indicator */
+    .live-info { font-size: .83rem; color: #888; margin-bottom: .75rem; line-height: 1.5; }
+    .live-status-row { display: flex; align-items: center; gap: .5rem; margin-bottom: .6rem; min-height: 1.4rem; }
     .pulse {
       width: 10px; height: 10px; border-radius: 50%;
       background: #c0392b; display: none;
-      animation: pulse 1.2s ease-in-out infinite;
+      animation: pulse 1.2s ease-in-out infinite; flex-shrink: 0;
     }
     .pulse.active { display: block; }
     @keyframes pulse {
@@ -100,66 +97,67 @@
 </head>
 <body>
 <div class="card">
-  <h1>Local STT — Hebrew</h1>
-  <div class="health">
-    <div class="dot" id="dot"></div>
-    <span id="healthText">Connecting to server...</span>
+
+  <div class="header">
+    <h1>Local STT — Hebrew</h1>
+    <div class="health">
+      <div class="dot" id="dot"></div>
+      <span id="healthText">Connecting…</span>
+    </div>
   </div>
 
-  <!-- ── File transcription ────────────────────────────────────── -->
-  <h2>File</h2>
-  <div class="upload-area" id="uploadArea">
-    <input type="file" id="fileInput" accept="audio/*">
-    <div class="upload-label">Click or drag an audio file here</div>
-    <div class="file-name" id="fileName"></div>
+  <!-- tabs -->
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('file')">File</button>
+    <button class="tab"        onclick="showTab('live')">Live Mic</button>
   </div>
 
-  <div class="buttons">
-    <button class="btn-full"   id="btnFull"   disabled onclick="transcribe()">Transcribe</button>
-    <button class="btn-stream" id="btnStream" disabled onclick="transcribeStream()">Stream</button>
+  <!-- ── FILE TAB ─────────────────────────────────────────────── -->
+  <div id="tab-file" class="tab-panel active">
+
+    <div class="upload-area" id="uploadArea">
+      <input type="file" id="fileInput" accept="audio/*">
+      <div class="upload-label">Click or drag an audio file here</div>
+      <div class="file-name" id="fileName"></div>
+    </div>
+
+    <div class="buttons">
+      <button class="btn-blue"  id="btnFull"   disabled onclick="transcribe()">Transcribe</button>
+      <button class="btn-green" id="btnStream" disabled onclick="transcribeStream()">Stream</button>
+    </div>
+
+    <div class="status" id="fileStatus"></div>
+    <div class="result-box placeholder" id="fileResult">Transcript will appear here…</div>
+    <div class="meta" id="fileMeta"></div>
+
   </div>
 
-  <div class="status" id="status"></div>
-  <div class="result-box placeholder" id="result">Transcript will appear here…</div>
-  <div class="meta" id="meta"></div>
+  <!-- ── LIVE TAB ──────────────────────────────────────────────── -->
+  <div id="tab-live" class="tab-panel">
 
-  <!-- ── Live mode ─────────────────────────────────────────────── -->
-  <hr class="divider">
-  <h2>Live — Microphone</h2>
-  <p style="font-size:.85rem;color:#888;margin-bottom:1rem;">
-    Records in 8-second segments and transcribes each one automatically.
-  </p>
+    <p class="live-info">
+      Records in 8-second segments and transcribes each one automatically.<br>
+      The transcript accumulates as you speak.
+    </p>
 
-  <div class="live-controls">
-    <button class="btn-live-start" id="btnLiveStart" onclick="startLive()">Start Recording</button>
-    <button class="btn-live-stop"  id="btnLiveStop"  onclick="stopLive()" disabled>Stop</button>
+    <div class="buttons">
+      <button class="btn-red"  id="btnLiveStart" onclick="startLive()">Start Recording</button>
+      <button class="btn-grey" id="btnLiveStop"  onclick="stopLive()" disabled>Stop</button>
+    </div>
+
+    <div class="live-status-row">
+      <div class="pulse" id="pulse"></div>
+      <span class="status" style="margin:0" id="liveStatus"></span>
+    </div>
+
+    <div class="result-box placeholder" id="liveResult">Live transcript will appear here…</div>
+
   </div>
 
-  <div class="live-indicator">
-    <div class="pulse" id="pulse"></div>
-    <span id="liveStatus"></span>
-  </div>
-  <div class="result-box placeholder" id="liveResult">Live transcript will appear here…</div>
-</div>
+</div><!-- /card -->
 
 <script>
   const API = "http://localhost:8000";
-
-  // ── Elements ────────────────────────────────────────────────────
-  const fileInput    = document.getElementById("fileInput");
-  const fileName     = document.getElementById("fileName");
-  const btnFull      = document.getElementById("btnFull");
-  const btnStream    = document.getElementById("btnStream");
-  const statusEl     = document.getElementById("status");
-  const resultEl     = document.getElementById("result");
-  const metaEl       = document.getElementById("meta");
-  const dot          = document.getElementById("dot");
-  const healthText   = document.getElementById("healthText");
-  const btnLiveStart = document.getElementById("btnLiveStart");
-  const btnLiveStop  = document.getElementById("btnLiveStop");
-  const liveStatus   = document.getElementById("liveStatus");
-  const liveResult   = document.getElementById("liveResult");
-  const pulse        = document.getElementById("pulse");
 
   // ── Health ──────────────────────────────────────────────────────
   async function checkHealth() {
@@ -168,24 +166,32 @@
       const d = await r.json();
       dot.className = d.status === "ok" ? "dot ok" : "dot err";
       healthText.textContent = d.status === "ok"
-        ? `Ready — ${d.device} · ${d.compute_type}`
-        : "Server error: " + d.error;
+        ? `${d.device} · ${d.compute_type}`
+        : "error: " + d.error;
     } catch {
       dot.className = "dot err";
-      healthText.textContent = "Server not reachable — run: stt-server";
+      healthText.textContent = "not reachable";
     }
   }
   checkHealth();
 
+  // ── Tabs ────────────────────────────────────────────────────────
+  function showTab(name) {
+    document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+    document.getElementById("tab-" + name).classList.add("active");
+    document.querySelector(`.tab[onclick="showTab('${name}')"]`).classList.add("active");
+  }
+
   // ── File selection ───────────────────────────────────────────────
   uploadArea.addEventListener("click", () => fileInput.click());
   fileInput.addEventListener("change", () => {
-    const f = fileInput.files[0];
-    if (!f) return;
+    const f = fileInput.files[0]; if (!f) return;
     fileName.textContent = f.name;
-    btnFull.disabled = false;
-    btnStream.disabled = false;
-    clearResult();
+    btnFull.disabled = false; btnStream.disabled = false;
+    fileResult.className = "result-box placeholder";
+    fileResult.textContent = "Transcript will appear here…";
+    fileMeta.textContent = ""; fileStatus.textContent = "";
   });
   uploadArea.addEventListener("dragover", e => { e.preventDefault(); uploadArea.classList.add("dragover"); });
   uploadArea.addEventListener("dragleave", () => uploadArea.classList.remove("dragover"));
@@ -193,54 +199,44 @@
     e.preventDefault(); uploadArea.classList.remove("dragover");
     const f = e.dataTransfer.files[0]; if (!f) return;
     const dt = new DataTransfer(); dt.items.add(f);
-    fileInput.files = dt.files;
-    fileInput.dispatchEvent(new Event("change"));
+    fileInput.files = dt.files; fileInput.dispatchEvent(new Event("change"));
   });
-
-  // ── Helpers ──────────────────────────────────────────────────────
-  function setLoading(on) { btnFull.disabled = on; btnStream.disabled = on; }
-  function clearResult() {
-    resultEl.className = "result-box placeholder";
-    resultEl.textContent = "Transcript will appear here…";
-    metaEl.textContent = ""; statusEl.textContent = "";
-  }
-  function showResult(text) {
-    resultEl.className = "result-box";
-    resultEl.textContent = text || "(empty result)";
-  }
 
   // ── Full transcription ───────────────────────────────────────────
   async function transcribe() {
     const file = fileInput.files[0]; if (!file) return;
-    setLoading(true);
-    statusEl.textContent = "Transcribing…";
-    resultEl.className = "result-box placeholder"; resultEl.textContent = "Working…"; metaEl.textContent = "";
+    btnFull.disabled = true; btnStream.disabled = true;
+    fileStatus.textContent = "Transcribing…";
+    fileResult.className = "result-box placeholder"; fileResult.textContent = "Working…";
+    fileMeta.textContent = "";
     try {
       const fd = new FormData(); fd.append("file", file);
       const t0 = Date.now();
       const r = await fetch(`${API}/transcribe`, { method: "POST", body: fd });
       if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
       const d = await r.json();
-      showResult(d.text);
-      metaEl.textContent = [
+      fileResult.className = d.text ? "result-box" : "result-box placeholder";
+      fileResult.textContent = d.text || "(no speech detected)";
+      fileMeta.textContent = [
         d.rtf != null ? `RTF ${d.rtf}` : null,
         `${((Date.now()-t0)/1000).toFixed(1)}s`,
         d.segments?.length ? `${d.segments.length} segments` : null,
       ].filter(Boolean).join(" · ");
-      statusEl.textContent = "Done.";
+      fileStatus.textContent = "Done.";
     } catch (e) {
-      statusEl.textContent = "Error: " + e.message;
-      clearResult();
+      fileStatus.textContent = "Error: " + e.message;
+      fileResult.className = "result-box placeholder"; fileResult.textContent = "";
     }
-    setLoading(false);
+    btnFull.disabled = false; btnStream.disabled = false;
   }
 
   // ── Streaming transcription ──────────────────────────────────────
   async function transcribeStream() {
     const file = fileInput.files[0]; if (!file) return;
-    setLoading(true);
-    statusEl.textContent = "Streaming…";
-    resultEl.className = "result-box"; resultEl.textContent = ""; metaEl.textContent = "";
+    btnFull.disabled = true; btnStream.disabled = true;
+    fileStatus.textContent = "Streaming…";
+    fileResult.className = "result-box"; fileResult.textContent = "";
+    fileMeta.textContent = "";
     let segCount = 0;
     try {
       const fd = new FormData(); fd.append("file", file);
@@ -257,32 +253,28 @@
           if (!line.startsWith("data: ")) continue;
           try {
             const d = JSON.parse(line.slice(6));
-            if (d.error) { statusEl.textContent = "Error: " + d.error; break; }
-            resultEl.textContent += (resultEl.textContent ? " " : "") + d.text;
-            statusEl.textContent = `Streaming… (${++segCount} segment${segCount !== 1 ? "s" : ""})`;
+            if (d.error) { fileStatus.textContent = "Error: " + d.error; break; }
+            fileResult.textContent += (fileResult.textContent ? " " : "") + d.text;
+            fileStatus.textContent = `Streaming… (${++segCount} segment${segCount !== 1 ? "s" : ""})`;
           } catch {}
         }
       }
-      statusEl.textContent = `Done — ${segCount} segments.`;
-      metaEl.textContent = `${segCount} segments`;
-    } catch (e) { statusEl.textContent = "Error: " + e.message; }
-    setLoading(false);
+      fileStatus.textContent = `Done — ${segCount} segments.`;
+      fileMeta.textContent = `${segCount} segments`;
+    } catch (e) { fileStatus.textContent = "Error: " + e.message; }
+    btnFull.disabled = false; btnStream.disabled = false;
   }
 
   // ── Live mode ────────────────────────────────────────────────────
   const SEGMENT_MS = 8000;
-  let liveStream   = null;
-  let liveRecorder = null;
-  let isLive       = false;
-  let liveText     = "";
-  let segTimer     = null;
+  let liveStream = null, liveRecorder = null;
+  let isLive = false, liveText = "", segTimer = null;
 
   async function startLive() {
     try {
       liveStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (e) {
-      liveStatus.textContent = "Mic access denied: " + e.message;
-      return;
+      liveStatus.textContent = "Mic access denied: " + e.message; return;
     }
     isLive = true; liveText = "";
     liveResult.className = "result-box"; liveResult.textContent = "";
@@ -305,11 +297,8 @@
   function recordSegment() {
     if (!isLive) return;
     const chunks = [];
-
-    // Pick best supported mime type
-    const mimeType = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", ""]
+    const mimeType = ["audio/webm;codecs=opus","audio/webm","audio/ogg;codecs=opus",""]
       .find(t => t === "" || MediaRecorder.isTypeSupported(t));
-
     liveRecorder = new MediaRecorder(liveStream, mimeType ? { mimeType } : {});
     liveRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
     liveRecorder.onstop = async () => {

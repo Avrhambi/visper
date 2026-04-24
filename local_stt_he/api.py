@@ -7,10 +7,22 @@ Stable public API for cross-project use.
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Callable, Optional, Union
 
 import numpy as np
+
+# Keeps the model loaded between calls in the same process (e.g. the FastAPI server).
+_engine_cache: dict = {}
+
+
+def _get_engine(config: dict):
+    key = json.dumps(config, sort_keys=True)
+    if key not in _engine_cache:
+        from local_stt_he.transcriber import Transcriber
+        _engine_cache[key] = Transcriber(config)
+    return _engine_cache[key]
 
 
 def transcribe_chunked(
@@ -37,11 +49,10 @@ def transcribe_chunked(
     str : Full transcribed text.
     """
     from local_stt_he.benchmark import get_best_config
-    from local_stt_he.transcriber import Transcriber
 
     resolved_bucket = _resolve_bucket(source, bucket)
     config = get_best_config(resolved_bucket)
-    engine = Transcriber(config)
+    engine = _get_engine(config)
     result = engine.transcribe(source, bucket=resolved_bucket, on_segment=on_segment)
     return result.text
 
@@ -66,11 +77,10 @@ def transcribe(
     str : Transcribed Hebrew text.
     """
     from local_stt_he.benchmark import get_best_config
-    from local_stt_he.transcriber import Transcriber
 
     resolved_bucket = _resolve_bucket(source, bucket)
     config = get_best_config(resolved_bucket)
-    engine = Transcriber(config)
+    engine = _get_engine(config)
     result = engine.transcribe(source, bucket=resolved_bucket)
     return result.text
 
