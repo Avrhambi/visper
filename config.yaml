@@ -8,36 +8,62 @@
 language: "he"
 model_id: "ivrit-ai/whisper-large-v3-turbo-ct2"
 
-# ── Resource profile ──────────────────────────────────────────────────────────
+# ══ BASIC ════════════════════════════════════════════════════════════════════
+# These are the only settings most users ever need to change.
+
 # foreground  — uses benchmark-winning config, no restrictions. Best speed.
 # background  — caps CPU threads to half, lowers process priority, unloads model after idle.
 # minimal     — CPU-only, 2 threads, int8. Lowest footprint.
 resource_profile: "foreground"
 
-max_cpu_threads: 0       # 0 = no cap. Hard cap regardless of benchmark winner.
-max_ram_mb: 0            # 0 = no limit. Warn if exceeded.
-max_vram_mb: 0           # 0 = no limit. Fall back to CPU if exceeded.
-
-idle_unload_seconds: 0   # 0 = never unload. Unload model after N seconds of silence.
-                          # Recommended: 60 for background, 0 for foreground.
-
-# ── Accuracy mode ────────────────────────────────────────────────────────────
 # auto      — picks highest accuracy tier your hardware can run without RTF > 0.85
 # fast      — beam_size=1, greedy. Best for real-time streaming on weak hardware.
+# light     — beam_size=2. Good quality step-up over fast with minimal cost.
 # balanced  — beam_size=3. Good quality, moderate compute.
 # accurate  — beam_size=5, best_of=3. Maximum quality. Needs hardware headroom.
 accuracy_mode: "auto"
-confidence_retry_enabled: false  # Re-run at next accuracy tier if avg log-prob below threshold. Off by default (adds latency).
 
-bucket_accuracy_overrides: {}
-# Example — accurate for long files, fast for streaming:
-#   bucket_accuracy_overrides:
-#     streaming: "fast"
-#     short:     "balanced"
-#     long:      "accurate"
-#     extended:  "accurate"
+# txt | srt | json
+output_format: "txt"
 
-# ── Manual parameter overrides (advanced) ────────────────────────────────────
+# ── Per-bucket accuracy overrides (optional) ──────────────────────────────
+bucket_accuracy_overrides:
+  short:     "accurate"
+  medium:    "accurate"
+  long:      "accurate"
+  extended:  "accurate"
+# CUDA int8_float32 RTF: short=0.58, medium=0.20, long=0.18, extended=0.15
+# All well under 0.85 budget even at accurate tier (4.5x multiplier).
+
+# ══ STREAMING ════════════════════════════════════════════════════════════════
+# Settings for live microphone and file-streaming mode.
+
+max_chunk_seconds: 28           # Hard max chunk length before forced emit (Whisper limit ~30s)
+stream_flush_on_silence: true   # Emit chunk on silence (recommended)
+overlap_seconds: 2.0            # Sliding window overlap between chunks. Improves boundary accuracy.
+                                # Each chunk re-includes the last N seconds of the previous chunk.
+                                # Duplicate words at boundaries are stripped before display.
+                                # 0.0 = disabled.
+
+# ── VAD ──────────────────────────────────────────────────────────────────────
+vad_filter: true
+vad_min_silence_ms: 300
+vad_speech_pad_ms: 200
+noise_calibration_seconds: 1.5  # 0 = disable. Records ambient noise at session start to set VAD threshold.
+
+# ══ ADVANCED — do not change unless you know why ══════════════════════════════
+
+# ── Output ────────────────────────────────────────────────────────────────────
+write_output_file: true      # write <input_filename>.txt alongside input
+print_to_stdout: true
+
+# ── Confidence retry ──────────────────────────────────────────────────────────
+# Re-run at next accuracy tier if avg log-prob below threshold.
+# Enabled by default when accuracy_mode resolves to "accurate" tier.
+# Set to false to always disable, true to always enable.
+confidence_retry_enabled: false
+
+# ── Manual parameter overrides ────────────────────────────────────────────────
 manual_params:
   beam_size: 0              # 0 = auto
   temperature: -1           # -1 = auto
@@ -49,49 +75,31 @@ manual_params:
   log_prob_threshold: -1
   no_speech_threshold: -1
 
-# ── VAD settings ─────────────────────────────────────────────────────────────
-vad_filter: true
-vad_min_silence_ms: 300
-vad_speech_pad_ms: 200
-noise_calibration_seconds: 1.5  # 0 = disable. Records ambient noise at session start to set VAD threshold.
-
-# ── Streaming settings ────────────────────────────────────────────────────────
-max_chunk_seconds: 28
-stream_flush_on_silence: true
-
-# ── Output settings ───────────────────────────────────────────────────────────
-output_format: "txt"         # txt | srt | json
-write_output_file: true      # write <input_filename>.txt alongside input
-print_to_stdout: true
+# ── Resource limits ───────────────────────────────────────────────────────────
+max_cpu_threads: 0       # 0 = no cap. Hard cap regardless of benchmark winner.
+max_ram_mb: 0            # 0 = no limit. Warn if exceeded.
+max_vram_mb: 0           # 0 = no limit. Fall back to CPU if exceeded.
+idle_unload_seconds: 0   # 0 = never unload. Unload model after N seconds of silence.
 
 # ── Background process mode ───────────────────────────────────────────────────
 run_in_background: false
 
-# ── Benchmark mode ───────────────────────────────────────────────────────────
-# smart (default): tests 1-2 best compute types × 2 smart thread counts.
-#   ~4-6 CPU candidates instead of 20+.  3-5× faster than full.
-# full: exhaustive — all compute types × thread counts [2,4,6,8].
-#   Same as running: python run_benchmark.py --full
+# ── Benchmark ─────────────────────────────────────────────────────────────────
+# smart (default): tests 1-2 best compute types × 2 smart thread counts. ~3-5 min.
+# full: exhaustive — all compute types × thread counts [2,4,6,8]. ~15-20 min.
 benchmark_mode: "smart"
 
-# ── Compute override (advanced) ───────────────────────────────────────────────
+# ── Compute override ──────────────────────────────────────────────────────────
 # Leave blank to use auto-detected best config from benchmark_results.json.
-force_device: ""             # "" | "cpu" | "cuda" | "openvino"
-force_compute_type: ""       # "" | "int8" | "float16" | "int8_float16" | etc.
-force_cpu_threads: 0         # 0 = use benchmark result
+force_device: "cuda"          # "" | "cpu" | "cuda" | "openvino"
+force_compute_type: "int8_float32"  # "" | "int8" | "float16" | "int8_float16" | etc.
+force_cpu_threads: 2          # 0 = use benchmark result
 
 # Set skip_benchmark: true together with force_device + force_compute_type to
 # bypass the benchmark entirely — no benchmark_results.json needed.
-# force_cpu_threads is also used when set; otherwise defaults to physical_cores/2.
-#
-# Example — fully manual CPU config:
-#   skip_benchmark: true
-#   force_device: "cpu"
-#   force_compute_type: "int8"
-#   force_cpu_threads: 4
 skip_benchmark: false
 
 # ── iGPU preference ───────────────────────────────────────────────────────────
 # If Intel iGPU (OpenVINO) RTF is within this margin of the benchmark winner,
 # prefer the iGPU for power efficiency. 0.0 = disabled, 0.2 = 20% margin.
-igpu_preference_margin: 0.20
+igpu_preference_margin: 0.05

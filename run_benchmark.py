@@ -1,14 +1,17 @@
 #!/usr/bin/env python
-"""Entry point: python run_benchmark.py [--force] [--quick] [--full]"""
+"""Entry point: python run_benchmark.py [--force] [--fast] [--quick] [--full]"""
 import argparse
 import json
-from core.benchmark import run_benchmark, RESULTS_PATH
+from core.benchmark import run_benchmark, run_fast_benchmark, RESULTS_PATH
 
 
 def main():
     parser = argparse.ArgumentParser(description="Benchmark hardware for STT transcription")
     parser.add_argument("--force", action="store_true",
                         help="Re-run even if benchmark_results.json already exists")
+    parser.add_argument("--fast", action="store_true",
+                        help="Fast mode — rules pick primary device, mini-benchmark measures "
+                             "its RTF only (~60s). Fallback chain RTFs are probed lazily at runtime.")
     parser.add_argument("--quick", action="store_true",
                         help="Heuristic only — derive config from hardware detection, "
                              "no inference timing. Instant but no RTF measurements.")
@@ -17,10 +20,14 @@ def main():
                              "[2,4,6,8]. Slow but covers every combination.")
     args = parser.parse_args()
 
-    if args.quick and args.full:
-        parser.error("--quick and --full are mutually exclusive.")
+    flags = [args.fast, args.quick, args.full]
+    if sum(flags) > 1:
+        parser.error("--fast, --quick and --full are mutually exclusive.")
 
-    run_benchmark(force=args.force, quick=args.quick, full=args.full)
+    if args.fast:
+        run_fast_benchmark(force=args.force)
+    else:
+        run_benchmark(force=args.force, quick=args.quick, full=args.full)
 
     if RESULTS_PATH.exists():
         results = json.loads(RESULTS_PATH.read_text())

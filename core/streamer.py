@@ -64,6 +64,11 @@ class LiveStreamer:
         self._total_elapsed = 0.0
 
         self._running = False
+        self._prev_text: str = ""  # last chunk's raw transcription for overlap dedup
+
+        # Graceful degradation under queue pressure
+        self._pressure_mode: bool = False
+        self._clean_chunks: int = 0  # consecutive chunks processed without drops
 
         # Load VAD settings
         self._vad_min_silence_ms = 300
@@ -82,8 +87,11 @@ class LiveStreamer:
                 self._max_chunk_s = cfg.get("max_chunk_seconds", MAX_CHUNK_S)
                 self._stream_flush_on_silence = cfg.get("stream_flush_on_silence", True)
                 self._noise_calibration_seconds = cfg.get("noise_calibration_seconds", 1.5)
+                overlap_s = float(cfg.get("overlap_seconds", 2.0))
+                self._overlap_samples = int(overlap_s * SAMPLE_RATE) if overlap_s > 0 else 0
         except Exception:
             self._noise_calibration_seconds = 1.5
+            self._overlap_samples = int(2.0 * SAMPLE_RATE)
         from core.resource import get_idle_unload_seconds
         self._idle_unload_seconds = get_idle_unload_seconds()
 
@@ -230,8 +238,14 @@ class LiveStreamer:
 
             if should_emit and self._audio_buffer:
                 audio_chunk = np.concatenate(self._audio_buffer)
-                self._audio_buffer = []
-                self._buffer_duration = 0.0
+                # Keep overlap tail so next chunk starts with shared audio context
+                if self._overlap_samples > 0 and len(audio_chunk) > self._overlap_samples:
+                    overlap_tail = audio_chunk[-self._overlap_samples:]
+                    self._audio_buffer = [overlap_tail]
+                    self._buffer_duration = self._overlap_samples / SAMPLE_RATE
+                else:
+                    self._audio_buffer = []
+                    self._buffer_duration = 0.0
                 silence_frames = 0
                 self._enqueue_chunk(audio_chunk, is_final=is_final)
 
@@ -271,9 +285,13 @@ class LiveStreamer:
                 chunk = data[pos:end]
                 is_final = end >= total_frames
                 self._enqueue_chunk(chunk, is_final=is_final)
-                pos = end
-                # Simulate real-time speed
-                time.sleep(len(chunk) / SAMPLE_RATE)
+                # Advance by chunk minus overlap so next chunk shares the tail
+                new_pos = end - self._overlap_samples
+                advance = new_pos - pos
+                time.sleep(max(0, advance) / SAMPLE_RATE)  # real-time for new audio only
+                pos = new_pos
+                if pos >= total_frames:
+                    break
         except Exception as e:
             print(f"[STT] File streaming error: {e}", file=sys.stderr)
 
@@ -304,6 +322,46 @@ class LiveStreamer:
                 pass
 
     # ------------------------------------------------------------------
+    # Overlap deduplication
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _deduplicate_overlap(prev_text: str, current_text: str) -> str:
+        """
+        Strip words at the start of current_text that duplicate the tail of prev_text.
+        These arise from the sliding window overlap: the last N seconds of the previous
+        chunk are re-included in the current chunk, so the model transcribes them twice.
+
+        Strategy: word-level suffix/prefix match — find the longest suffix of prev_text
+        that equals a prefix of current_text (up to 10 words), strip that prefix.
+        Comparison is done on clean words (punctuation stripped) to tolerate minor
+        differences in how Whisper renders boundary punctuation.
+        """
+        if not prev_text or not current_text or not prev_text.strip():
+            return current_text
+
+        import re
+
+        def clean(w: str) -> str:
+            return re.sub(r'[^\w]', '', w)
+
+        prev_words = prev_text.split()
+        curr_words = current_text.split()
+        prev_clean = [clean(w) for w in prev_words]
+        curr_clean = [clean(w) for w in curr_words]
+
+        max_check = min(10, len(prev_clean), len(curr_clean))
+        best = 0
+        for n in range(1, max_check + 1):
+            if prev_clean[-n:] == curr_clean[:n]:
+                best = n
+
+        if best == 0:
+            return current_text
+
+        return ' '.join(curr_words[best:]).strip()
+
+    # ------------------------------------------------------------------
     # Consumer thread
     # ------------------------------------------------------------------
 
@@ -325,15 +383,46 @@ class LiveStreamer:
                 # Model was idle-unloaded — reload
                 self._reload_model()
 
+            # Check queue pressure: engage fast tier when ≥2 consecutive drops
+            if self._consecutive_drops >= 2 and not self._pressure_mode:
+                self._pressure_mode = True
+                self._clean_chunks = 0
+                print(
+                    "[STT] Queue pressure detected — switching to fast tier (beam=1) "
+                    "to reduce latency. Consider setting resource_profile=minimal.",
+                    file=sys.stderr,
+                )
+
             try:
-                result = self._transcriber.transcribe(chunk, bucket="streaming")
+                if self._pressure_mode:
+                    from core.params import get_params_for_tier
+                    fast_params = get_params_for_tier("fast", "streaming", self._transcriber._config)
+                    # Temporarily patch the transcriber call with fast params via a wrapper
+                    result = self._transcriber.transcribe(chunk, bucket="streaming",
+                                                          _tier_override=fast_params)
+                else:
+                    result = self._transcriber.transcribe(chunk, bucket="streaming")
+
                 self._segments_transcribed += 1
                 self._total_audio_duration += result.audio_duration
                 self._total_elapsed += result.elapsed
 
+                # Track clean chunks to detect pressure recovery
+                if self._consecutive_drops == 0:
+                    self._clean_chunks += 1
+                else:
+                    self._clean_chunks = 0
+
+                if self._pressure_mode and self._clean_chunks >= 10:
+                    self._pressure_mode = False
+                    print("[STT] Queue pressure cleared — restoring accuracy tier.", file=sys.stderr)
+
                 if result.text:
-                    self._reset_idle_timer()
-                    self._on_transcript(result.text, is_final)
+                    text = self._deduplicate_overlap(self._prev_text, result.text)
+                    self._prev_text = result.text  # store raw for next chunk comparison
+                    if text:
+                        self._reset_idle_timer()
+                        self._on_transcript(text, is_final)
             except Exception as e:
                 print(f"[STT] Transcription error: {e}", file=sys.stderr)
 

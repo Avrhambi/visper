@@ -3,6 +3,7 @@ import subprocess
 import sys
 import os
 import pathlib
+import shutil
 import site
 import time
 import threading
@@ -75,24 +76,93 @@ def check_and_fix_cuda():
         return "cpu"
 
 
+def check_ffmpeg():
+    """Warn if ffmpeg is not on PATH. Does not block setup."""
+    if shutil.which("ffmpeg"):
+        print("[Setup] ffmpeg found.")
+        return True
+    print(
+        "[Setup] WARNING: ffmpeg not found on PATH.\n"
+        "         MP3/MP4/M4A files require ffmpeg to decode.\n"
+        "         Install from https://ffmpeg.org and add it to PATH.\n"
+        "         WAV files work without it."
+    )
+    return False
+
+
+def _load_hf_token() -> str:
+    """Read HF_TOKEN from environment or .env file."""
+    token = os.environ.get("HF_TOKEN", "")
+    if not token:
+        try:
+            env_file = pathlib.Path(".env")
+            if env_file.exists():
+                for line in env_file.read_text().splitlines():
+                    if line.startswith("HF_TOKEN="):
+                        token = line.split("=", 1)[1].strip()
+        except Exception:
+            pass
+    return token
+
+
+def download_model():
+    """
+    Download the model to HuggingFace cache during setup so first transcription is instant.
+    Skips silently if already cached.
+    """
+    model_id = "ivrit-ai/whisper-large-v3-turbo-ct2"
+    try:
+        from huggingface_hub import try_to_load_from_cache
+        cached = try_to_load_from_cache(model_id, "config.json")
+        if cached is not None:
+            print(f"[Setup] Model already in cache — skipping download.")
+            return True
+    except Exception:
+        pass
+
+    token = _load_hf_token()
+    if not token:
+        print("[Setup] No HF_TOKEN found. If the model repo is gated, set HF_TOKEN in .env.")
+
+    print(f"[Setup] Downloading model '{model_id}' (~1.5 GB) — this happens once...")
+    t0 = time.time()
+    try:
+        from huggingface_hub import snapshot_download
+        snapshot_download(
+            repo_id=model_id,
+            token=token or None,
+            ignore_patterns=["*.msgpack", "*.h5", "flax_model*"],
+        )
+        elapsed = time.time() - t0
+        print(f"[Setup] Model downloaded ({elapsed:.0f}s)")
+        return True
+    except Exception as e:
+        print(
+            f"[Setup] Model download failed: {e}\n"
+            "         The model will be downloaded on first transcription instead."
+        )
+        return False
+
+
 def install_requirements():
     """Install base requirements, then CUDA extras if GPU is available."""
-
-    # Step 1: Base requirements
+    print("[Setup] Installing base requirements...")
+    t0 = time.time()
     _run_with_progress(
-        label="📦 Installing base requirements",
+        label="Installing base requirements",
         cmd=[sys.executable, "-m", "pip", "install", "-r", "requirements.txt", "-q"],
         estimated_seconds=15
     )
+    print(f"[Setup] Base requirements done ({time.time() - t0:.0f}s)")
 
-    # Step 2: GPU detection (fast, no bar needed)
-    print("\n🔍 Detecting GPU...")
+    print("\n[Setup] Detecting GPU...")
     tier = check_and_fix_cuda()
 
-    # Step 3: CUDA libraries (only if GPU found)
     if tier in ("dedicated_gpu", "entry_gpu"):
+        print("[Setup] Installing CUDA libraries...")
+        t1 = time.time()
         _run_with_progress(
-            label="⚡ Installing CUDA libraries ",
+            label="Installing CUDA libraries",
             cmd=[
                 sys.executable, "-m", "pip", "install",
                 "nvidia-cublas-cu12", "nvidia-cudnn-cu12", "-q"
@@ -100,38 +170,80 @@ def install_requirements():
             estimated_seconds=30
         )
         _register_cuda_dlls()
+        print(f"[Setup] CUDA libraries done ({time.time() - t1:.0f}s)")
 
-    print("\n✅ All requirements satisfied.\n")
+    print("\n[Setup] All requirements satisfied.\n")
     return tier
 
 
-if __name__ == "__main__":
-    import pathlib
+def run_benchmark_with_timeout(timeout_seconds: int = 180):
+    """Run fast benchmark with a timeout. Falls back to --quick mode if it takes too long."""
+    from core.benchmark import run_fast_benchmark, run_benchmark
+    result = [None]
+    error = [None]
 
+    def _worker():
+        try:
+            run_fast_benchmark()
+            result[0] = "done"
+        except Exception as e:
+            error[0] = e
+
+    t = threading.Thread(target=_worker, daemon=True)
+    t0 = time.time()
+    t.start()
+    t.join(timeout=timeout_seconds)
+
+    if t.is_alive():
+        print(
+            f"\n[Setup] Benchmark taking longer than expected ({timeout_seconds}s). "
+            "Check GPU driver status.",
+            flush=True,
+        )
+        print("[Setup] Falling back to quick mode (no RTF probe)...")
+        try:
+            run_benchmark(quick=True)
+        except Exception as e:
+            print(f"[Setup] Quick benchmark also failed: {e}")
+    elif error[0]:
+        print(f"[Setup] Benchmark error: {error[0]}")
+        print("[Setup] Falling back to quick mode...")
+        try:
+            run_benchmark(quick=True)
+        except Exception as e:
+            print(f"[Setup] Quick benchmark also failed: {e}")
+    else:
+        elapsed = time.time() - t0
+        print(f"[Setup] Benchmark complete ({elapsed:.0f}s)")
+
+
+if __name__ == "__main__":
     print("=" * 50)
     print("        STT Engine — Setup")
     print("=" * 50 + "\n")
 
+    # Step 1: Install dependencies
     install_requirements()
 
-    # Run benchmark if no results exist yet
+    # Step 2: ffmpeg check (non-blocking)
+    print("[Setup] Checking ffmpeg...")
+    check_ffmpeg()
+
+    # Step 3: Download model into HF cache (skips if already present)
+    print("[Setup] Checking model cache...")
+    download_model()
+
+    # Step 4: Benchmark if needed
     results_path = pathlib.Path("benchmark_results.json")
     if not results_path.exists():
-        print("[Setup] No benchmark results found.")
-        print("[Setup] Detecting hardware configuration (quick mode — no inference)...\n")
-        from core.benchmark import run_benchmark
-        run_benchmark(quick=True)
+        print("\n[Setup] No benchmark results found.")
+        print("[Setup] Running fast benchmark: rules + primary RTF probe (~60s)...\n")
+        run_benchmark_with_timeout(timeout_seconds=180)
     else:
         print("[Setup] Benchmark results found — skipping benchmark.\n")
 
-    print("[Setup] Done.\n")
+    print("\n[Setup] Done.\n")
     print("  Offline transcription:   python transcribe_file.py audio.mp3")
     print("  Live/streaming:          python transcribe_live.py")
     print("  Re-benchmark:            python run_benchmark.py --force")
     print()
-    print("  Or after pip install -e .:")
-    print("    from stt_he import transcribe")
-    print("    result = transcribe('audio.wav')")
-    print()
-    print("    from stt_he import stream_transcribe")
-    print("    stream_transcribe(lambda text, final: print(text))")

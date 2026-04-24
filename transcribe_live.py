@@ -9,13 +9,30 @@ Usage:
     python transcribe_live.py --file audio.mp3       # file streaming mode
     python transcribe_live.py --clip                 # copy final result to clipboard
     python transcribe_live.py --output result.txt    # write accumulated result to file
+    python transcribe_live.py --progress             # print each segment with timestamp
+    python transcribe_live.py --background           # run detached from terminal
 """
 from __future__ import annotations
 
-import argparse
+import os
 import sys
-import time
 from pathlib import Path
+
+if sys.platform == "win32":
+    import site as _site
+    _nvidia_dirs = []
+    for _sp in _site.getsitepackages():
+        _nv = Path(_sp) / "nvidia"
+        if _nv.is_dir():
+            for _pkg in _nv.iterdir():
+                _bin = _pkg / "bin"
+                if _bin.is_dir():
+                    _nvidia_dirs.append(str(_bin))
+    if _nvidia_dirs:
+        os.environ["PATH"] = ";".join(_nvidia_dirs) + ";" + os.environ.get("PATH", "")
+
+import argparse
+import time
 
 
 def main():
@@ -26,7 +43,17 @@ def main():
                         help="Copy final accumulated result to clipboard")
     parser.add_argument("--output", metavar="PATH",
                         help="Write accumulated result to this file")
+    parser.add_argument("--progress", "-p", action="store_true",
+                        help="Print each segment with a timestamp as it arrives")
+    parser.add_argument("--background", action="store_true",
+                        help="Run as background process (detached)")
     args = parser.parse_args()
+
+    if args.background:
+        if sys.platform != "win32":
+            if os.fork():
+                sys.exit(0)
+        sys.stdout = open(os.devnull, "w")
 
     from core.benchmark import get_best_config
     from core.streamer import LiveStreamer
@@ -41,25 +68,57 @@ def main():
         print("[STT] Listening... (Ctrl+C to stop and save)", file=sys.stderr)
 
     accumulated: list[str] = []
+    _status_active = [False]  # mutable flag so closure can clear it
+
+    def _clear_status():
+        if _status_active[0]:
+            print("\r" + " " * 20 + "\r", end="", file=sys.stderr, flush=True)
+            _status_active[0] = False
+
+    def _show_status(msg: str):
+        print(f"\r  {msg}", end="", file=sys.stderr, flush=True)
+        _status_active[0] = True
 
     def on_transcript(text: str, is_final: bool) -> None:
-        if is_final:
-            print(text)
-            accumulated.append(text)
+        _clear_status()
+        if args.progress:
+            ts = time.strftime("%H:%M:%S")
+            if is_final:
+                print(f"[{ts}] {text}")
+                accumulated.append(text)
+            else:
+                print(f"[{ts}]… {text}")
         else:
-            print(f"{text}…")
+            if is_final:
+                print(text)
+                accumulated.append(text)
+            else:
+                print(f"{text}…")
 
     streamer = LiveStreamer(on_transcript=on_transcript, config=config, source=source)
     streamer.start()
 
+    # Status line updater — only in mic mode (file mode runs as fast as possible)
+    _last_had_text = [time.time()]
+
     try:
         while streamer.is_running:
-            time.sleep(0.1)
+            time.sleep(0.25)
+            if source:
+                # File mode: no silence indicator needed
+                continue
+            # Show listening/processing status based on queue depth
+            if streamer.buffer_duration > 0.5:
+                _show_status("[processing...]")
+            else:
+                _show_status("[listening...]")
             if source and not streamer.is_running:
                 break
     except KeyboardInterrupt:
+        _clear_status()
         print("\n[STT] Stopping...", file=sys.stderr)
     finally:
+        _clear_status()
         streamer.stop()
 
     stats = streamer.stats

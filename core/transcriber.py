@@ -22,7 +22,7 @@ import numpy as np
 
 ROOT = Path(__file__).parent.parent
 MODEL_ID = "ivrit-ai/whisper-large-v3-turbo-ct2"
-OV_MODEL_DIR = "ov_model"
+OV_MODEL_DIR = "models_ov/whisper-large-v3-turbo-ov"
 
 
 def _ov_set(cfg, attr: str, val) -> None:
@@ -61,14 +61,12 @@ class Transcriber:
         self._config = config
 
         # Load per-session config flags
-        self._confidence_retry_enabled = False
         self._language = "he"
         try:
             import yaml as _yaml
             _cfg_path = ROOT / "config.yaml"
             if _cfg_path.exists():
                 _ucfg = _yaml.safe_load(_cfg_path.read_text()) or {}
-                self._confidence_retry_enabled = _ucfg.get("confidence_retry_enabled", False)
                 self._language = _ucfg.get("language", "he")
         except Exception:
             pass
@@ -96,24 +94,52 @@ class Transcriber:
         t0 = time.time()
         try:
             self._backend = self._load_backend(config)
+            print(f"[Transcriber] Model ready ({time.time() - t0:.1f}s load)", file=sys.stderr)
+            return
         except Exception as e:
-            if "out of memory" in str(e).lower() or "outofmemory" in type(e).__name__.lower():
+            print(f"[Transcriber] Load failed ({self._config_label}): {e}", file=sys.stderr)
+
+        # Walk fallback chain from benchmark_results.json
+        from core.benchmark import RESULTS_PATH, probe_and_cache_fallback
+        fallback_chain: list[dict] = []
+        if RESULTS_PATH.exists():
+            try:
+                data = json.loads(RESULTS_PATH.read_text())
+                fallback_chain = data.get("fallback_order", [])
+            except Exception:
+                pass
+
+        import threading
+        for fallback in fallback_chain:
+            flabel = self._make_label(fallback)
+            print(f"[Transcriber] Trying fallback: {flabel}...", file=sys.stderr)
+            try:
+                self._backend = self._load_backend(fallback)
+                self._config = fallback
+                self._backend_type = fallback["device"]
+                self._config_label = flabel
+                primary_label = self._make_label(config)
                 print(
-                    f"[Transcriber] OOM loading {config.get('device')} model — "
-                    "retrying with CPU int8",
+                    f"\n[STT] WARNING: Primary device ({primary_label}) failed to load.\n"
+                    f"[STT]          Running on fallback: {flabel}.\n"
+                    f"[STT]          Transcription may be slower. "
+                    f"Re-run setup.py if this is unexpected.\n",
                     file=sys.stderr,
                 )
-                fallback = dict(config)
-                fallback["device"] = "cpu"
-                fallback["compute_type"] = "int8"
-                self._config = fallback  # keep internal state consistent
-                self._backend_type = "cpu"
-                self._config_label = self._make_label(fallback)
-                self._backend = self._load_backend(fallback)
-            else:
-                raise
-        elapsed = time.time() - t0
-        print(f"[Transcriber] Model ready ({elapsed:.1f}s load)", file=sys.stderr)
+                print(f"[Transcriber] Fallback ready ({time.time() - t0:.1f}s): {flabel}",
+                      file=sys.stderr)
+                # Lazy RTF probe in background so accuracy tier is correct next session
+                threading.Thread(
+                    target=probe_and_cache_fallback, args=(fallback,), daemon=True
+                ).start()
+                return
+            except Exception as fe:
+                print(f"[Transcriber] Fallback {flabel} failed: {fe}", file=sys.stderr)
+
+        raise RuntimeError(
+            "All devices in the fallback chain failed to load. "
+            "Check hardware state and re-run: python run_benchmark.py --force"
+        )
 
     def _spawn_worker(self, config: dict, venv_path: Path) -> Optional[subprocess.Popen]:
         """Spawn worker.py inside the device venv. Returns the Popen handle or None."""
@@ -213,15 +239,18 @@ class Transcriber:
         source: Union[str, Path, np.ndarray],
         bucket: str = "medium",
         on_segment: Optional[Callable[[dict], None]] = None,
+        _tier_override=None,
     ) -> TranscriptResult:
         """
         source: file path or float32 numpy array at 16 kHz.
         bucket: duration hint for params selection.
+        _tier_override: WhisperParams instance from core.params; bypasses auto-selection.
+                        Used by LiveStreamer for graceful degradation under queue pressure.
         """
         from core.params import get_params
         import yaml
 
-        params = get_params(bucket, self._config)
+        params = _tier_override if _tier_override is not None else get_params(bucket, self._config)
 
         # Load VAD settings from config.yaml
         vad_filter = True
@@ -272,7 +301,7 @@ class Transcriber:
             # Confidence-gated retry: re-run at next tier if quality is low.
             # on_segment is NOT re-called for retry segments — the original callbacks
             # already fired; the final result.text reflects the retry output.
-            if (self._confidence_retry_enabled
+            if (params.confidence_retry_enabled
                     and bucket != "streaming"
                     and seg_list
                     and not self._confidence_ok(seg_list, params.log_prob_threshold)):

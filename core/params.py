@@ -33,6 +33,22 @@ TIERS = {
             "extended":  {"condition_on_prev_text": True,  "without_timestamps": True},
         },
     },
+    "light": {
+        "beam_size": 2,
+        "best_of": 1,
+        "temperature": 0.0,
+        "patience": 1.0,
+        "compression_ratio_threshold": 2.3,
+        "log_prob_threshold": -0.9,
+        "no_speech_threshold": 0.55,
+        "per_bucket": {
+            "streaming": {"condition_on_prev_text": False, "without_timestamps": True},
+            "short":     {"condition_on_prev_text": False, "without_timestamps": True},
+            "medium":    {"condition_on_prev_text": False, "without_timestamps": False},
+            "long":      {"condition_on_prev_text": True,  "without_timestamps": False},
+            "extended":  {"condition_on_prev_text": True,  "without_timestamps": False},
+        },
+    },
     "balanced": {
         "beam_size": 3,
         "best_of": 1,
@@ -69,6 +85,7 @@ TIERS = {
 
 TIER_RTF_MULTIPLIERS = {
     "fast":     1.0,
+    "light":    1.35,
     "balanced": 1.8,
     "accurate": 4.5,
 }
@@ -89,6 +106,7 @@ class WhisperParams:
     no_speech_threshold: float
     tier_used: str
     auto_selected: bool
+    confidence_retry_enabled: bool = False
 
     def as_transcribe_kwargs(self) -> dict:
         return {
@@ -164,7 +182,7 @@ def get_params(bucket: str, hw_config: dict) -> WhisperParams:
             else:
                 # Pick highest tier that fits budget
                 tier = "fast"
-                for t in ("accurate", "balanced"):
+                for t in ("accurate", "balanced", "light"):
                     if estimate_rtf_cost(base_rtf, t) < RTF_BUDGET:
                         tier = t
                         break
@@ -173,6 +191,13 @@ def get_params(bucket: str, hw_config: dict) -> WhisperParams:
 
         tier_def = TIERS[tier]
         per_bucket = tier_def["per_bucket"].get(bucket, tier_def["per_bucket"].get("medium", {}))
+
+        # confidence_retry: use config value; default True only when accurate tier
+        cfg_retry = user.get("confidence_retry_enabled")
+        if cfg_retry is None:
+            confidence_retry = (tier == "accurate")
+        else:
+            confidence_retry = bool(cfg_retry)
 
         params = WhisperParams(
             beam_size=tier_def["beam_size"],
@@ -186,6 +211,7 @@ def get_params(bucket: str, hw_config: dict) -> WhisperParams:
             no_speech_threshold=tier_def["no_speech_threshold"],
             tier_used=tier,
             auto_selected=auto_selected,
+            confidence_retry_enabled=confidence_retry,
         )
 
         # Hard rule: streaming/short must never have condition_on_prev_text=True
@@ -228,12 +254,12 @@ def get_params(bucket: str, hw_config: dict) -> WhisperParams:
 
     except Exception as e:
         print(f"[STT] params.get_params error ({e}), falling back to fast tier.", file=sys.stderr)
-        tier_def = TIERS["fast"]
         return WhisperParams(
             beam_size=1, best_of=1, temperature=0.0, patience=1.0,
             condition_on_prev_text=False, without_timestamps=True,
             compression_ratio_threshold=2.4, log_prob_threshold=-1.0,
             no_speech_threshold=0.6, tier_used="fast", auto_selected=False,
+            confidence_retry_enabled=False,
         )
 
 
@@ -247,7 +273,7 @@ def describe_params(params: WhisperParams) -> str:
 # Confidence-gated retry helpers
 # ---------------------------------------------------------------------------
 
-_TIER_UPGRADE = {"fast": "balanced", "balanced": "accurate", "accurate": None}
+_TIER_UPGRADE = {"fast": "light", "light": "balanced", "balanced": "accurate", "accurate": None}
 
 
 def next_tier(tier: str) -> Optional[str]:
@@ -277,6 +303,7 @@ def get_params_for_tier(tier: str, bucket: str, hw_config: dict) -> WhisperParam
         no_speech_threshold=tier_def["no_speech_threshold"],
         tier_used=tier,
         auto_selected=False,
+        confidence_retry_enabled=False,  # retry path never re-retries
     )
 
     # Hard rule: streaming/short must never have condition_on_prev_text=True

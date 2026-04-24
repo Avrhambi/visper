@@ -290,7 +290,21 @@ def _get_hardware_candidates(hw_info: dict = None, mode: str = "smart") -> list[
                 "num_workers":     1,
                 "omp_threads":     4,
                 "is_igpu":         True,
+                "is_hetero":       False,
                 "label":           f"OpenVINO {device_id}",
+            })
+            # HETERO — distributes layers across iGPU + CPU; benchmarks show
+            # this is always 3-7% faster than iGPU alone on Iris Xe.
+            candidates.append({
+                "device":          "openvino",
+                "openvino_device": f"HETERO:{device_id},CPU",
+                "compute_type":    "int8",
+                "cpu_threads":     4,
+                "num_workers":     1,
+                "omp_threads":     4,
+                "is_igpu":         True,
+                "is_hetero":       True,
+                "label":           f"OpenVINO HETERO:{device_id},CPU",
             })
         candidates.append({
             "device":          "openvino",
@@ -309,6 +323,232 @@ def _get_hardware_candidates(hw_info: dict = None, mode: str = "smart") -> list[
 
 
 _CUDA_MIN_VRAM_MB = 1800  # int8_float32 works on 2GB (MX350 confirmed); int8 hangs
+
+
+def _build_fallback_chain(hw_info: dict) -> tuple[dict, list[dict]]:
+    """
+    Return (primary_candidate, fallback_candidates) derived purely from hardware rules.
+    No inference timing.  Order: CUDA → HETERO iGPU+CPU → iGPU → OV CPU → CT2 CPU.
+    Rules are derived from benchmark test data (i5-1135G7 / MX350 / Iris Xe).
+    """
+    chain: list[dict] = []
+
+    # 1. CUDA — only when enough VRAM to load int8_float32 without OOM
+    if hw_info.get("cuda_available") and hw_info.get("gpu_vram_mb", 0) >= _CUDA_MIN_VRAM_MB:
+        vram = hw_info.get("gpu_vram_mb", 0)
+        compute = "int8_float16" if vram >= 4000 else "int8_float32"
+        chain.append({
+            "device": "cuda", "compute_type": compute,
+            "cpu_threads": 4, "num_workers": 1, "omp_threads": 4,
+            "label": f"CUDA {compute}",
+        })
+
+    # 2. OpenVINO iGPU variants (HETERO before plain iGPU — 3-7% faster from test data)
+    if hw_info.get("openvino_available"):
+        all_gpu_devs = [d for d in hw_info.get("openvino_devices", []) if d.startswith("GPU")]
+        # Filter out NVIDIA/AMD discrete GPUs — OV targets Intel iGPU only
+        dev_names = hw_info.get("openvino_device_names", {})
+        igpu_devs = [
+            d for d in all_gpu_devs
+            if not any(kw in dev_names.get(d, "").lower()
+                       for kw in ("nvidia", "geforce", "radeon", "amd"))
+        ]
+        ov_ready = (ROOT / "models_ov" / "whisper-large-v3-turbo-ov").exists()
+        for igpu in igpu_devs:
+            if ov_ready:
+                chain.append({
+                    "device": "openvino", "openvino_device": f"HETERO:{igpu},CPU",
+                    "compute_type": "int8", "cpu_threads": 4, "num_workers": 1, "omp_threads": 4,
+                    "is_igpu": True, "is_hetero": True,
+                    "label": f"OpenVINO HETERO:{igpu},CPU",
+                })
+                chain.append({
+                    "device": "openvino", "openvino_device": igpu,
+                    "compute_type": "int8", "cpu_threads": 4, "num_workers": 1, "omp_threads": 4,
+                    "is_igpu": True, "is_hetero": False,
+                    "label": f"OpenVINO {igpu}",
+                })
+        # OV CPU — faster than CT2 CPU by ~2x on medium/long from test data
+        chain.append({
+            "device": "openvino", "openvino_device": "CPU",
+            "compute_type": "int8", "cpu_threads": 4, "num_workers": 1, "omp_threads": 4,
+            "is_igpu": False, "label": "OpenVINO CPU",
+        })
+
+    # 3. CT2 CPU int8 — 2 threads optimal (AVX2: more threads hurt, test-confirmed)
+    logical = hw_info.get("logical_cores", 4)
+    cpu_threads = max(2, min(2, logical))  # always 2 — OMP pool locks at first call
+    chain.append({
+        "device": "cpu", "compute_type": "int8",
+        "cpu_threads": cpu_threads, "num_workers": 1, "omp_threads": cpu_threads,
+        "label": f"CT2 CPU int8 t{cpu_threads}w1",
+    })
+
+    if not chain:
+        # Absolute fallback — should never happen
+        chain = [{"device": "cpu", "compute_type": "int8",
+                  "cpu_threads": 2, "num_workers": 1, "omp_threads": 2,
+                  "label": "CT2 CPU int8 t2w1"}]
+
+    return chain[0], chain[1:]
+
+
+def _auto_accuracy_tier(rtf: float) -> str:
+    if rtf * 4.5 < 0.85:
+        return "accurate"
+    if rtf * 1.8 < 0.85:
+        return "balanced"
+    return "fast"
+
+
+def run_fast_benchmark(force: bool = False) -> None:
+    """
+    2-layer fast setup (~60s vs ~5min for smart mode):
+      Layer 1 — rules derive primary device + fallback chain (no inference).
+      Layer 2 — mini-benchmark probes primary device RTF only.
+    Fallback chain RTFs are measured lazily on first use at runtime.
+    """
+    if RESULTS_PATH.exists() and not force:
+        print("[Benchmark] Results already exist. Use --force to re-run.")
+        return
+
+    print("[Benchmark] Fast mode — hardware detection + primary probe...")
+    hw = _collect_hardware_info()
+    avx_str = ("AVX2" if hw["avx2"] else "") + (" AVX-512" if hw["avx512"] else "")
+    print(f"[Benchmark] CPU: {hw['cpu']} "
+          f"({hw['logical_cores']} cores{', ' + avx_str if avx_str else ''})")
+    if hw["cuda_available"]:
+        print(f"[Benchmark] GPU: {hw.get('gpu_name', 'unknown')} ({hw.get('gpu_vram_mb')}MB)")
+    if hw["openvino_available"]:
+        print(f"[Benchmark] OpenVINO: {hw['openvino_devices']}")
+
+    primary, fallback_chain = _build_fallback_chain(hw)
+    print(f"[Benchmark] Primary  : {primary['label']}")
+    if fallback_chain:
+        print(f"[Benchmark] Fallbacks: {' -> '.join(c['label'] for c in fallback_chain)}")
+
+    # Probe primary candidate
+    records = _get_records_by_bucket()
+    audio_files_info = {
+        b: {"path": str(r[0].resolve()), "target_duration": r[1]}
+        for b, r in records.items() if r
+    }
+
+    # Try primary; if it fails, walk chain until one succeeds
+    working_primary = None
+    remaining_chain = [primary] + list(fallback_chain)
+    session: dict[str, dict] = {}
+    for candidate in remaining_chain:
+        print(f"[Benchmark] Probing: {candidate['label']}...", flush=True)
+        session = _run_candidate_in_venv(candidate, audio_files_info)
+        any_ok = any(r.get("status") == "ok" for r in session.values())
+        if any_ok:
+            working_primary = candidate
+            # Remove it from fallback chain
+            remaining_chain = [c for c in remaining_chain if c is not candidate]
+            break
+        print(f"[Benchmark] {candidate['label']} failed — trying next fallback.")
+
+    if working_primary is None:
+        print("[Benchmark] ERROR: no candidate loaded successfully. Falling back to quick mode.")
+        run_benchmark(force=True, quick=True)
+        return
+
+    best: dict[str, Optional[dict]] = {}
+    for b in BUCKET_ORDER + ["streaming"]:
+        r = session.get(b)
+        if r and r.get("status") == "ok":
+            entry = {k: v for k, v in working_primary.items() if k != "label"}
+            rtf = r.get("rtf") or r.get("median_rtf", 1.0)
+            entry["rtf"] = rtf
+            entry["status"] = "ok"
+            if b == "streaming":
+                entry["median_rtf"] = r.get("median_rtf", rtf)
+                entry["rtf_stdev"] = r.get("rtf_stdev", 0.0)
+                entry["p95_ms"] = r.get("p95_ms")
+            entry["auto_accuracy_tier"] = _auto_accuracy_tier(rtf)
+            best[b] = entry
+        else:
+            best[b] = None
+
+    # Stamp venv path so Transcriber can use the same venv
+    from core import venv_manager
+    vp = venv_manager.venv_path(working_primary["device"])
+    if vp.exists():
+        for cfg in best.values():
+            if cfg:
+                cfg["venv_path"] = str(vp)
+
+    # Fallback order — rule-derived, no RTF yet (will be measured lazily on first use)
+    fallback_order = [{k: v for k, v in c.items() if k != "label"} for c in remaining_chain]
+
+    output = {
+        "timestamp":      datetime.now().isoformat(timespec="seconds"),
+        "model_id":       MODEL_ID,
+        "hardware":       hw,
+        "best":           best,
+        "fallback_order": fallback_order,
+        "mode":           "fast",
+    }
+    RESULTS_PATH.write_text(json.dumps(output, indent=2))
+
+    # Summary
+    print("\n[Benchmark] Primary device RTF:")
+    for bucket in BUCKET_ORDER + ["streaming"]:
+        cfg = best.get(bucket)
+        if cfg:
+            rtf_val = cfg.get("rtf") or cfg.get("median_rtf")
+            print(f"  {bucket:<12} RTF {rtf_val:.3f}  tier={cfg.get('auto_accuracy_tier')}")
+    print(f"[Benchmark] Fallback chain ({len(fallback_order)} entries) — RTF measured on first use.")
+    print(f"[Benchmark] Results written to {RESULTS_PATH}")
+
+
+def probe_and_cache_fallback(candidate: dict, probe_bucket: str = "medium") -> Optional[dict]:
+    """
+    Quick RTF probe for a fallback device being used for the first time at runtime.
+    Runs one timed inference pass on probe_bucket audio, then updates benchmark_results.json
+    so all future calls use measured RTF (and correct accuracy tier) for this device.
+    Returns updated candidate dict with rtf + auto_accuracy_tier, or None on failure.
+    """
+    records = _get_records_by_bucket()
+    rec = records.get(probe_bucket) or next((v for v in records.values() if v), None)
+    if rec is None:
+        return None
+
+    audio_files_info = {
+        probe_bucket: {"path": str(rec[0].resolve()), "target_duration": rec[1]}
+    }
+
+    label = candidate.get("label") or f"{candidate['device']} {candidate.get('compute_type', '')}"
+    print(f"[Benchmark] Lazy-probing RTF for fallback: {label}...", flush=True)
+    session = _run_candidate_in_venv(candidate, audio_files_info)
+    r = session.get(probe_bucket)
+
+    if not r or r.get("status") != "ok":
+        print(f"[Benchmark] Fallback probe failed for {label}.")
+        return None
+
+    measured_rtf = r["rtf"]
+    tier = _auto_accuracy_tier(measured_rtf)
+    print(f"[Benchmark] Fallback {label}: RTF {measured_rtf:.3f} -> tier={tier}")
+
+    updated = {**candidate, "rtf": measured_rtf, "auto_accuracy_tier": tier,
+               "status": "ok", "probed_from": probe_bucket}
+
+    if RESULTS_PATH.exists():
+        try:
+            data = json.loads(RESULTS_PATH.read_text())
+            best = data.get("best", {})
+            for b in BUCKET_ORDER + ["streaming"]:
+                if best.get(b) is None:
+                    best[b] = dict(updated)
+            data["best"] = best
+            RESULTS_PATH.write_text(json.dumps(data, indent=2))
+        except Exception as e:
+            print(f"[Benchmark] Could not update results file: {e}")
+
+    return updated
+
 
 def _estimate_config_heuristic(hw_info: dict) -> dict[str, Optional[dict]]:
     """
@@ -350,7 +590,7 @@ def _estimate_config_heuristic(hw_info: dict) -> dict[str, Optional[dict]]:
     else:
         igpu_devices = [d for d in hw_info.get("openvino_devices", [])
                         if d.startswith("GPU")]
-        ov_model_ready = (ROOT / "ov_model").exists()
+        ov_model_ready = (ROOT / "models_ov" / "whisper-large-v3-turbo-ov").exists()
         if hw_info.get("openvino_available") and igpu_devices and ov_model_ready:
             base = {
                 "device":          "openvino",
@@ -413,7 +653,7 @@ def _load_model(candidate: dict):
         )
     elif device == "openvino":
         import openvino_genai as ov_genai
-        ov_model_dir = ROOT / "ov_model"
+        ov_model_dir = ROOT / "models_ov" / "whisper-large-v3-turbo-ov"
         if not ov_model_dir.exists():
             raise RuntimeError(
                 f"OpenVINO model not found at {ov_model_dir}. "
