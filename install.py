@@ -145,7 +145,7 @@ def download_model():
 
 
 def install_requirements():
-    """Install base requirements, then CUDA extras if GPU is available."""
+    """Install base requirements + server extras, then CUDA extras if GPU is available."""
     print("[Setup] Installing base requirements...")
     t0 = time.time()
     _run_with_progress(
@@ -154,6 +154,15 @@ def install_requirements():
         estimated_seconds=15
     )
     print(f"[Setup] Base requirements done ({time.time() - t0:.0f}s)")
+
+    print("[Setup] Installing package + server extras (fastapi, uvicorn)...")
+    t1 = time.time()
+    _run_with_progress(
+        label="Installing server extras",
+        cmd=[sys.executable, "-m", "pip", "install", "-e", ".[server]", "-q"],
+        estimated_seconds=10
+    )
+    print(f"[Setup] Server extras done ({time.time() - t1:.0f}s)")
 
     print("\n[Setup] Detecting GPU...")
     tier = check_and_fix_cuda()

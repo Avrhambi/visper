@@ -14,15 +14,32 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import pathlib
 import queue
 import tempfile
 import threading
 import time
 
+log = logging.getLogger(__name__)
+
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+
+def _register_cuda_dlls() -> None:
+    """Add nvidia package DLL folders to PATH so cublas/cudnn are found at runtime."""
+    import os
+    import site
+    for sp in site.getsitepackages():
+        nvidia_path = pathlib.Path(sp) / "nvidia"
+        if nvidia_path.exists():
+            for dll in nvidia_path.rglob("*.dll"):
+                folder = str(dll.parent)
+                if folder not in os.environ.get("PATH", ""):
+                    os.environ["PATH"] += f";{folder}"
+
+_register_cuda_dlls()
 
 app = FastAPI(title="Hebrew STT", version="0.2.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -34,6 +51,19 @@ async def _save_upload(file: UploadFile) -> pathlib.Path:
     tmp.write(await file.read())
     tmp.close()
     return pathlib.Path(tmp.name)
+
+
+@app.on_event("startup")
+async def warmup():
+    async def _load():
+        try:
+            from local_stt_he.api import _get_engine
+            from local_stt_he.benchmark import get_best_config
+            cfg = get_best_config("medium")
+            await asyncio.to_thread(_get_engine, cfg)
+        except Exception as e:
+            log.warning("Warmup failed: %s", e)
+    asyncio.create_task(_load())
 
 
 @app.get("/health")
@@ -72,6 +102,7 @@ async def transcribe_endpoint(file: UploadFile = File(...)):
         rtf = round(elapsed / audio_duration, 3) if audio_duration else None
         return {"text": text, "segments": segments, "rtf": rtf}
     except Exception as e:
+        log.exception("Transcription failed")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         tmp_path.unlink(missing_ok=True)

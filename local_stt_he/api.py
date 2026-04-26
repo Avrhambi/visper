@@ -8,6 +8,7 @@ Stable public API for cross-project use.
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 from typing import Callable, Optional, Union
 
@@ -15,14 +16,18 @@ import numpy as np
 
 # Keeps the model loaded between calls in the same process (e.g. the FastAPI server).
 _engine_cache: dict = {}
+_engine_lock = threading.Lock()
 
+
+_MODEL_KEYS = ("device", "compute_type", "cpu_threads", "num_workers", "venv_path")
 
 def _get_engine(config: dict):
-    key = json.dumps(config, sort_keys=True)
-    if key not in _engine_cache:
-        from local_stt_he.transcriber import Transcriber
-        _engine_cache[key] = Transcriber(config)
-    return _engine_cache[key]
+    key = json.dumps({k: config.get(k) for k in _MODEL_KEYS}, sort_keys=True)
+    with _engine_lock:
+        if key not in _engine_cache:
+            from local_stt_he.transcriber import Transcriber
+            _engine_cache[key] = Transcriber(config)
+        return _engine_cache[key]
 
 
 def transcribe_chunked(
