@@ -284,11 +284,6 @@
     btnLiveStart.disabled = false; btnLiveStop.disabled = true;
     pulse.classList.remove("active");
     liveStatus.textContent = liveText ? "Stopped." : "Stopped — nothing recorded.";
-    if (allChunks.length) {
-      const blob = new Blob(allChunks, { type: liveMimeType || "audio/webm" });
-      livePlayer.src = URL.createObjectURL(blob);
-      livePlayerWrap.style.display = "block";
-    }
   }
 
   function recordSegment() {
@@ -320,6 +315,10 @@
         pulse.classList.add("active");
         liveStatus.textContent = "Recording…";
         recordSegment();
+      } else if (allChunks.length) {
+        const blob = new Blob(allChunks, { type: liveMimeType || "audio/webm" });
+        livePlayer.src = URL.createObjectURL(blob);
+        livePlayerWrap.style.display = "block";
       }
     };
     liveRecorder.start();
