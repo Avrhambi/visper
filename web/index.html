@@ -288,8 +288,9 @@
     liveText = ""; allChunks = [];
     livePlayerWrap.style.display = "none"; livePlayer.src = "";
     liveResult.className = "result-box placeholder"; liveResult.textContent = "";
-    btnLiveStart.disabled = true; btnLiveStop.disabled = false;
-    liveStatus.textContent = "Calibrating…";
+    btnLiveStart.disabled = true; btnLiveStart.textContent = "Starting…";
+    btnLiveStop.disabled = true;
+    liveStatus.textContent = "";
 
     audioCtx = new AudioContext({ sampleRate: 16000 });
     const source = audioCtx.createMediaStreamSource(micStream);
@@ -300,8 +301,10 @@
     liveWs.onmessage = (e) => {
       const d = JSON.parse(e.data);
       if (d.status === "ready") {
-        liveStatus.textContent = "Recording…";
+        btnLiveStart.disabled = true; btnLiveStart.textContent = "Start Recording";
+        btnLiveStop.disabled = false;
         pulse.classList.add("active");
+        liveStatus.textContent = "Recording…";
       } else if (d.text) {
         liveText += (liveText ? " " : "") + d.text;
         liveResult.textContent = liveText;
@@ -334,7 +337,8 @@
     if (liveRecorder && liveRecorder.state === "recording") liveRecorder.stop();
     if (micStream)    { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
 
-    btnLiveStart.disabled = false; btnLiveStop.disabled = true;
+    btnLiveStart.disabled = false; btnLiveStart.textContent = "Start Recording";
+    btnLiveStop.disabled = true;
     pulse.classList.remove("active");
     liveStatus.textContent = "Finishing…";
 
