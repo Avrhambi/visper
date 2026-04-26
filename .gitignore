@@ -5,6 +5,11 @@
 .claude/
 CLAUDE.md
 
+# ── Gemini ────────────────────────────────────────────────────────────────────
+.gemini/
+GEMINI.md
+.geminiignore
+
 # ── Auto-generated benchmark output ───────────────────────────────────────────
 benchmark_results.json
 

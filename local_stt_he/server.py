@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import pathlib
 import queue
 import tempfile
@@ -28,6 +29,7 @@ import numpy as np
 from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 def _register_cuda_dlls() -> None:
     """Add nvidia package DLL folders to PATH so cublas/cudnn are found at runtime."""
@@ -46,6 +48,7 @@ _register_cuda_dlls()
 app = FastAPI(title="Hebrew STT", version="0.2.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+import re
 
 async def _save_upload(file: UploadFile) -> pathlib.Path:
     suffix = pathlib.Path(file.filename or "audio.wav").suffix or ".wav"
@@ -130,6 +133,7 @@ async def transcribe_stream(file: UploadFile = File(...)):
     tmp_path = await _save_upload(file)
     q: queue.Queue = queue.Queue()
     _sentinel = object()
+    abort_event = threading.Event()
 
     def _run() -> None:
         try:
@@ -149,13 +153,21 @@ async def transcribe_stream(file: UploadFile = File(...)):
                 bucket = "long"
             else:
                 bucket = "extended"
+            
             t0 = time.monotonic()
-            transcribe_chunked(str(tmp_path), lambda seg: q.put(seg), bucket)
+            transcribe_chunked(
+                str(tmp_path), 
+                lambda seg: q.put(seg), 
+                bucket,
+                is_aborted=lambda: abort_event.is_set()
+            )
             elapsed = time.monotonic() - t0
-            rtf = round(elapsed / audio_duration, 3) if audio_duration else None
-            print(f"[stream]     audio={audio_duration or 0:.1f}s  duration={elapsed:.1f}s  RTF={rtf}", flush=True)
+            if not abort_event.is_set():
+                rtf = round(elapsed / audio_duration, 3) if audio_duration else None
+                print(f"[stream]     audio={audio_duration or 0:.1f}s  duration={elapsed:.1f}s  RTF={rtf}", flush=True)
         except Exception as e:
-            q.put({"error": str(e)})
+            if not abort_event.is_set():
+                q.put({"error": str(e)})
         finally:
             q.put(_sentinel)
 
@@ -169,7 +181,12 @@ async def transcribe_stream(file: UploadFile = File(...)):
                 if item is _sentinel:
                     break
                 yield f"data: {json.dumps(item, ensure_ascii=False)}\n\n"
+        except asyncio.CancelledError:
+            print("[server]     Client disconnected from stream, aborting...", flush=True)
+            abort_event.set()
+            raise
         finally:
+            abort_event.set() # ensure thread stops if generator ends for any reason
             tmp_path.unlink(missing_ok=True)
 
     return StreamingResponse(_generate(), media_type="text/event-stream")

@@ -42,6 +42,7 @@ def transcribe_chunked(
     source: Union[str, Path, np.ndarray],
     on_segment: Callable[[dict], None],
     bucket: str = "auto",
+    is_aborted: Optional[Callable[[], bool]] = None,
 ) -> str:
     """
     Like transcribe() but calls on_segment({"start", "end", "text"}) for each
@@ -56,6 +57,8 @@ def transcribe_chunked(
         Runs on the calling thread (blocking, single-threaded).
     bucket : str
         'auto' = detect duration and pick the correct bucket.
+    is_aborted : callable() -> bool, optional
+        Checked between segments. If returns True, transcription stops early.
 
     Returns
     -------
@@ -64,13 +67,14 @@ def transcribe_chunked(
     resolved_bucket = _resolve_bucket(source, bucket)
     config = _get_config(resolved_bucket)
     engine = _get_engine(config)
-    result = engine.transcribe(source, bucket=resolved_bucket, on_segment=on_segment)
+    result = engine.transcribe(source, bucket=resolved_bucket, on_segment=on_segment, is_aborted=is_aborted)
     return result.text
 
 
 def transcribe(
     source: Union[str, Path, np.ndarray],
     bucket: str = "auto",
+    is_aborted: Optional[Callable[[], bool]] = None,
 ) -> str:
     """
     Transcribe Hebrew speech from a file or audio array.
@@ -82,6 +86,8 @@ def transcribe(
     bucket : str
         'short' (<10s), 'medium' (10-30s), 'long' (30-60s), 'extended' (>60s).
         'auto' = detect duration and pick the correct bucket.
+    is_aborted : callable() -> bool, optional
+        Checked between segments. If returns True, transcription stops early.
 
     Returns
     -------
@@ -90,7 +96,7 @@ def transcribe(
     resolved_bucket = _resolve_bucket(source, bucket)
     config = _get_config(resolved_bucket)
     engine = _get_engine(config)
-    result = engine.transcribe(source, bucket=resolved_bucket)
+    result = engine.transcribe(source, bucket=resolved_bucket, is_aborted=is_aborted)
     return result.text
 
 

@@ -240,12 +240,14 @@ class Transcriber:
         bucket: str = "medium",
         on_segment: Optional[Callable[[dict], None]] = None,
         _tier_override=None,
+        is_aborted: Optional[Callable[[], bool]] = None,
     ) -> TranscriptResult:
         """
         source: file path or float32 numpy array at 16 kHz.
         bucket: duration hint for params selection.
         _tier_override: WhisperParams instance from local_stt_he.params; bypasses auto-selection.
                         Used by LiveStreamer for graceful degradation under queue pressure.
+        is_aborted: optional callable returning bool. Checked between segments.
         """
         from local_stt_he.params import get_params
         import yaml
@@ -269,7 +271,7 @@ class Transcriber:
         if self._worker_proc is not None:
             return self._transcribe_via_worker(source, bucket, params,
                                                vad_filter, vad_min_silence_ms,
-                                               vad_speech_pad_ms)
+                                               vad_speech_pad_ms, is_aborted=is_aborted)
 
         t0 = time.time()
 
@@ -289,6 +291,10 @@ class Transcriber:
             seg_list = []   # raw Segment objects (needed for avg_logprob)
             segments = []   # dicts for TranscriptResult
             for s in segs_gen:
+                if is_aborted and is_aborted():
+                    print("[STT] Transcription aborted by caller.", file=sys.stderr)
+                    break
+
                 seg_dict = {"start": s.start, "end": s.end, "text": s.text,
                             "confidence": round(float(s.avg_logprob), 3)}
                 seg_list.append(s)
