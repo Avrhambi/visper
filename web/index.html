@@ -122,8 +122,7 @@
     </div>
 
     <div class="buttons">
-      <button class="btn-blue"  id="btnFull"   disabled onclick="transcribe()">Transcribe</button>
-      <button class="btn-green" id="btnStream" disabled onclick="transcribeStream()">Stream</button>
+      <button class="btn-blue" id="btnFull" disabled onclick="transcribe()">Transcribe</button>
     </div>
 
     <div class="status" id="fileStatus"></div>
@@ -183,7 +182,7 @@
   fileInput.addEventListener("change", () => {
     const f = fileInput.files[0]; if (!f) return;
     fileName.textContent = f.name;
-    btnFull.disabled = false; btnStream.disabled = false;
+    btnFull.disabled = false;
     fileResult.className = "result-box placeholder";
     fileResult.textContent = "Transcript will appear here…";
     fileMeta.textContent = ""; fileStatus.textContent = "";
@@ -197,38 +196,15 @@
     fileInput.files = dt.files; fileInput.dispatchEvent(new Event("change"));
   });
 
-  // ── Full transcription ───────────────────────────────────────────
+  // ── Transcription (streaming) ────────────────────────────────────
   async function transcribe() {
     const file = fileInput.files[0]; if (!file) return;
-    btnFull.disabled = true; btnStream.disabled = true;
+    btnFull.disabled = true;
     fileStatus.textContent = "Transcribing…";
-    fileResult.className = "result-box placeholder"; fileResult.textContent = "Working…";
-    fileMeta.textContent = "";
-    try {
-      const fd = new FormData(); fd.append("file", file);
-      const t0 = Date.now();
-      const r = await fetch(`${API}/transcribe`, { method: "POST", body: fd });
-      if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
-      const d = await r.json();
-      fileResult.className = d.text ? "result-box" : "result-box placeholder";
-      fileResult.textContent = d.text || "(no speech detected)";
-      fileMeta.textContent = d.elapsed != null ? `${d.elapsed}s` : `${((Date.now()-t0)/1000).toFixed(1)}s`;
-      fileStatus.textContent = "Done.";
-    } catch (e) {
-      fileStatus.textContent = "Error: " + e.message;
-      fileResult.className = "result-box placeholder"; fileResult.textContent = "";
-    }
-    btnFull.disabled = false; btnStream.disabled = false;
-  }
-
-  // ── Streaming transcription ──────────────────────────────────────
-  async function transcribeStream() {
-    const file = fileInput.files[0]; if (!file) return;
-    btnFull.disabled = true; btnStream.disabled = true;
-    fileStatus.textContent = "Streaming…";
     fileResult.className = "result-box"; fileResult.textContent = "";
     fileMeta.textContent = "";
     let segCount = 0;
+    const t0 = Date.now();
     try {
       const fd = new FormData(); fd.append("file", file);
       const r = await fetch(`${API}/transcribe/stream`, { method: "POST", body: fd });
@@ -247,15 +223,22 @@
             if (d.error) { fileStatus.textContent = "Error: " + d.error; break; }
             if (d.text?.trim()) {
               fileResult.textContent += (fileResult.textContent ? " " : "") + d.text.trim();
-              fileStatus.textContent = `Streaming… (${++segCount} segment${segCount !== 1 ? "s" : ""})`;
+              fileStatus.textContent = `Transcribing… (${++segCount} segment${segCount !== 1 ? "s" : ""})`;
             }
           } catch {}
         }
       }
-      fileStatus.textContent = `Done — ${segCount} segments.`;
-      fileMeta.textContent = `${segCount} segments`;
-    } catch (e) { fileStatus.textContent = "Error: " + e.message; }
-    btnFull.disabled = false; btnStream.disabled = false;
+      if (!segCount) {
+        fileResult.className = "result-box placeholder";
+        fileResult.textContent = "(no speech detected)";
+      }
+      fileStatus.textContent = "Done.";
+      fileMeta.textContent = `${((Date.now()-t0)/1000).toFixed(1)}s`;
+    } catch (e) {
+      fileStatus.textContent = "Error: " + e.message;
+      fileResult.className = "result-box placeholder"; fileResult.textContent = "";
+    }
+    btnFull.disabled = false;
   }
 
   // ── Live mode ────────────────────────────────────────────────────
