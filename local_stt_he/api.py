@@ -17,6 +17,14 @@ import numpy as np
 # Keeps the model loaded between calls in the same process (e.g. the FastAPI server).
 _engine_cache: dict = {}
 _engine_lock = threading.Lock()
+_config_cache: dict = {}
+
+
+def _get_config(bucket: str) -> dict:
+    if bucket not in _config_cache:
+        from local_stt_he.benchmark import get_best_config
+        _config_cache[bucket] = get_best_config(bucket)
+    return _config_cache[bucket]
 
 
 _MODEL_KEYS = ("device", "compute_type", "cpu_threads", "num_workers", "venv_path")
@@ -53,10 +61,8 @@ def transcribe_chunked(
     -------
     str : Full transcribed text.
     """
-    from local_stt_he.benchmark import get_best_config
-
     resolved_bucket = _resolve_bucket(source, bucket)
-    config = get_best_config(resolved_bucket)
+    config = _get_config(resolved_bucket)
     engine = _get_engine(config)
     result = engine.transcribe(source, bucket=resolved_bucket, on_segment=on_segment)
     return result.text
@@ -81,10 +87,8 @@ def transcribe(
     -------
     str : Transcribed Hebrew text.
     """
-    from local_stt_he.benchmark import get_best_config
-
     resolved_bucket = _resolve_bucket(source, bucket)
-    config = get_best_config(resolved_bucket)
+    config = _get_config(resolved_bucket)
     engine = _get_engine(config)
     result = engine.transcribe(source, bucket=resolved_bucket)
     return result.text
@@ -107,10 +111,9 @@ def stream_transcribe(
         None = microphone live mode.
         File path = file streaming mode (incremental output).
     """
-    from local_stt_he.benchmark import get_best_config
     from local_stt_he.streamer import LiveStreamer
 
-    config = get_best_config("streaming")
+    config = _get_config("streaming")
     streamer = LiveStreamer(on_transcript=on_transcript, config=config, source=source)
     streamer.start()
     try:

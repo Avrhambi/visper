@@ -48,8 +48,11 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 async def _save_upload(file: UploadFile) -> pathlib.Path:
     suffix = pathlib.Path(file.filename or "audio.wav").suffix or ".wav"
     tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
-    tmp.write(await file.read())
-    tmp.close()
+    try:
+        while chunk := await file.read(1 << 20):  # 1 MB chunks
+            tmp.write(chunk)
+    finally:
+        tmp.close()
     return pathlib.Path(tmp.name)
 
 
@@ -92,10 +95,21 @@ async def transcribe_endpoint(file: UploadFile = File(...)):
         except Exception:
             audio_duration = None
 
+        if audio_duration is None:
+            bucket = "auto"
+        elif audio_duration < 10:
+            bucket = "short"
+        elif audio_duration < 30:
+            bucket = "medium"
+        elif audio_duration < 60:
+            bucket = "long"
+        else:
+            bucket = "extended"
+
         segments: list = []
         t0 = time.monotonic()
         text = await asyncio.to_thread(
-            transcribe_chunked, str(tmp_path), segments.append
+            transcribe_chunked, str(tmp_path), segments.append, bucket
         )
         elapsed = time.monotonic() - t0
 
@@ -123,8 +137,18 @@ async def transcribe_stream(file: UploadFile = File(...)):
                 audio_duration = sf.info(str(tmp_path)).duration
             except Exception:
                 audio_duration = None
+            if audio_duration is None:
+                bucket = "auto"
+            elif audio_duration < 10:
+                bucket = "short"
+            elif audio_duration < 30:
+                bucket = "medium"
+            elif audio_duration < 60:
+                bucket = "long"
+            else:
+                bucket = "extended"
             t0 = time.monotonic()
-            transcribe_chunked(str(tmp_path), lambda seg: q.put(seg))
+            transcribe_chunked(str(tmp_path), lambda seg: q.put(seg), bucket)
             elapsed = time.monotonic() - t0
             rtf = round(elapsed / audio_duration, 3) if audio_duration else None
             print(f"[stream]     audio={audio_duration or 0:.1f}s  duration={elapsed:.1f}s  RTF={rtf}", flush=True)
