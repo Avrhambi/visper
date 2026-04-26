@@ -205,7 +205,12 @@ async def live_ws(websocket: WebSocket):
 
     try:
         while True:
-            data  = await websocket.receive_bytes()
+            msg = await websocket.receive()
+            if msg.get("text") == "stop":
+                break
+            data  = msg.get("bytes") or b""
+            if not data:
+                continue
             block = np.frombuffer(data, dtype=np.float32).copy()
 
             if rms_threshold is None:
@@ -227,11 +232,18 @@ async def live_ws(websocket: WebSocket):
                 await _emit(chunk)
 
     except Exception:
-        if rms_threshold is not None and len(audio_buf) > _BLOCK_SIZE * 2:
-            try:
-                await _emit(audio_buf)
-            except Exception:
-                pass
+        pass
+
+    # flush remaining audio then close gracefully
+    if rms_threshold is not None and len(audio_buf) > _BLOCK_SIZE * 2:
+        try:
+            await _emit(audio_buf)
+        except Exception:
+            pass
+    try:
+        await websocket.close()
+    except Exception:
+        pass
 
 
 def main() -> None:

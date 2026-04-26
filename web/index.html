@@ -326,23 +326,30 @@
   }
 
   function stopLive() {
+    // stop audio capture first
     if (processor)    { processor.disconnect(); processor = null; }
     if (audioCtx)     { audioCtx.close(); audioCtx = null; }
-    if (liveWs && liveWs.readyState === WebSocket.OPEN) liveWs.close();
     if (liveRecorder && liveRecorder.state === "recording") liveRecorder.stop();
     if (micStream)    { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
 
     btnLiveStart.disabled = false; btnLiveStop.disabled = true;
     pulse.classList.remove("active");
-    liveStatus.textContent = liveText ? "Stopped." : "Stopped — nothing recorded.";
+    liveStatus.textContent = "Finishing…";
 
-    setTimeout(() => {
-      if (allChunks.length) {
-        const blob = new Blob(allChunks, { type: liveMimeType || "audio/webm" });
-        livePlayer.src = URL.createObjectURL(blob);
-        livePlayerWrap.style.display = "block";
-      }
-    }, 300);
+    // signal server to flush remaining audio, then let server close the connection
+    if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+      liveWs.onclose = () => {
+        liveStatus.textContent = liveText ? "Stopped." : "Stopped — nothing recorded.";
+        if (allChunks.length) {
+          const blob = new Blob(allChunks, { type: liveMimeType || "audio/webm" });
+          livePlayer.src = URL.createObjectURL(blob);
+          livePlayerWrap.style.display = "block";
+        }
+      };
+      liveWs.send("stop");
+    } else {
+      liveStatus.textContent = liveText ? "Stopped." : "Stopped — nothing recorded.";
+    }
   }
 </script>
 </body>
