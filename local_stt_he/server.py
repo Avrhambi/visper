@@ -100,7 +100,9 @@ async def transcribe_endpoint(file: UploadFile = File(...)):
         elapsed = time.monotonic() - t0
 
         rtf = round(elapsed / audio_duration, 3) if audio_duration else None
-        return {"text": text, "segments": segments, "rtf": rtf}
+        dur_str = f"{audio_duration:.1f}s" if audio_duration else "unknown"
+        log.info("transcribed: audio=%s  time=%.1fs  RTF=%s", dur_str, elapsed, rtf)
+        return {"text": text, "segments": segments, "rtf": rtf, "elapsed": round(elapsed, 1)}
     except Exception as e:
         log.exception("Transcription failed")
         raise HTTPException(status_code=500, detail=str(e))

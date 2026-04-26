@@ -135,11 +135,6 @@
   <!-- ── LIVE TAB ──────────────────────────────────────────────── -->
   <div id="tab-live" class="tab-panel">
 
-    <p class="live-info">
-      Records in 8-second segments and transcribes each one automatically.<br>
-      The transcript accumulates as you speak.
-    </p>
-
     <div class="buttons">
       <button class="btn-red"  id="btnLiveStart" onclick="startLive()">Start Recording</button>
       <button class="btn-grey" id="btnLiveStop"  onclick="stopLive()" disabled>Stop</button>
@@ -217,11 +212,7 @@
       const d = await r.json();
       fileResult.className = d.text ? "result-box" : "result-box placeholder";
       fileResult.textContent = d.text || "(no speech detected)";
-      fileMeta.textContent = [
-        d.rtf != null ? `RTF ${d.rtf}` : null,
-        `${((Date.now()-t0)/1000).toFixed(1)}s`,
-        d.segments?.length ? `${d.segments.length} segments` : null,
-      ].filter(Boolean).join(" · ");
+      fileMeta.textContent = d.elapsed != null ? `${d.elapsed}s` : `${((Date.now()-t0)/1000).toFixed(1)}s`;
       fileStatus.textContent = "Done.";
     } catch (e) {
       fileStatus.textContent = "Error: " + e.message;
