@@ -185,7 +185,7 @@ async def live_ws(websocket: WebSocket):
 
     _SAMPLE_RATE          = 16000
     _BLOCK_SIZE           = 512
-    _VAD_SILENCE_FRAMES   = int(0.5 * _SAMPLE_RATE / _BLOCK_SIZE)  # 500ms
+    _VAD_SILENCE_FRAMES   = int(0.8 * _SAMPLE_RATE / _BLOCK_SIZE)  # 800ms
     _MAX_FRAMES           = int(28.0 * _SAMPLE_RATE / _BLOCK_SIZE)
 
     cal_blocks: list  = []
@@ -226,9 +226,12 @@ async def live_ws(websocket: WebSocket):
                 chunk, audio_buf, silence_count = audio_buf.copy(), np.array([], dtype=np.float32), 0
                 await _emit(chunk)
 
-    except WebSocketDisconnect:
+    except Exception:
         if rms_threshold is not None and len(audio_buf) > _BLOCK_SIZE * 2:
-            await _emit(audio_buf)
+            try:
+                await _emit(audio_buf)
+            except Exception:
+                pass
 
 
 def main() -> None:
