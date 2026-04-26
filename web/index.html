@@ -80,6 +80,10 @@
     .result-box.placeholder { color: #bbb; font-style: italic; font-size: .9rem; }
     .meta { font-size: .78rem; color: #aaa; margin-top: .5rem; text-align: right; }
 
+    /* audio player */
+    .audio-player { margin-bottom: 1rem; display: none; }
+    .audio-player audio { width: 100%; border-radius: 8px; }
+
     /* live indicator */
     .live-info { font-size: .83rem; color: #888; margin-bottom: .75rem; line-height: 1.5; }
     .live-status-row { display: flex; align-items: center; gap: .5rem; margin-bottom: .6rem; min-height: 1.4rem; }
@@ -121,6 +125,10 @@
       <div class="file-name" id="fileName"></div>
     </div>
 
+    <div class="audio-player" id="filePlayerWrap">
+      <audio id="filePlayer" controls></audio>
+    </div>
+
     <div class="buttons">
       <button class="btn-blue" id="btnFull" disabled onclick="transcribe()">Transcribe</button>
     </div>
@@ -145,6 +153,10 @@
     </div>
 
     <div class="result-box placeholder" id="liveResult">Live transcript will appear here…</div>
+
+    <div class="audio-player" id="livePlayerWrap">
+      <audio id="livePlayer" controls></audio>
+    </div>
 
   </div>
 
@@ -186,6 +198,8 @@
     fileResult.className = "result-box placeholder";
     fileResult.textContent = "Transcript will appear here…";
     fileMeta.textContent = ""; fileStatus.textContent = "";
+    filePlayer.src = URL.createObjectURL(f);
+    filePlayerWrap.style.display = "block";
   });
   uploadArea.addEventListener("dragover", e => { e.preventDefault(); uploadArea.classList.add("dragover"); });
   uploadArea.addEventListener("dragleave", () => uploadArea.classList.remove("dragover"));
@@ -245,6 +259,7 @@
   const SEGMENT_MS = 4000;
   let liveStream = null, liveRecorder = null;
   let isLive = false, liveText = "", segTimer = null;
+  let allChunks = [], liveMimeType = "";
 
   async function startLive() {
     try {
@@ -252,7 +267,8 @@
     } catch (e) {
       liveStatus.textContent = "Mic access denied: " + e.message; return;
     }
-    isLive = true; liveText = "";
+    isLive = true; liveText = ""; allChunks = [];
+    livePlayerWrap.style.display = "none"; livePlayer.src = "";
     liveResult.className = "result-box"; liveResult.textContent = "";
     btnLiveStart.disabled = true; btnLiveStop.disabled = false;
     pulse.classList.add("active");
@@ -268,6 +284,11 @@
     btnLiveStart.disabled = false; btnLiveStop.disabled = true;
     pulse.classList.remove("active");
     liveStatus.textContent = liveText ? "Stopped." : "Stopped — nothing recorded.";
+    if (allChunks.length) {
+      const blob = new Blob(allChunks, { type: liveMimeType || "audio/webm" });
+      livePlayer.src = URL.createObjectURL(blob);
+      livePlayerWrap.style.display = "block";
+    }
   }
 
   function recordSegment() {
@@ -276,7 +297,8 @@
     const mimeType = ["audio/webm;codecs=opus","audio/webm","audio/ogg;codecs=opus",""]
       .find(t => t === "" || MediaRecorder.isTypeSupported(t));
     liveRecorder = new MediaRecorder(liveStream, mimeType ? { mimeType } : {});
-    liveRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+    liveMimeType = liveRecorder.mimeType;
+    liveRecorder.ondataavailable = e => { if (e.data.size > 0) { chunks.push(e.data); allChunks.push(e.data); } };
     liveRecorder.onstop = async () => {
       if (!chunks.length) { if (isLive) recordSegment(); return; }
       pulse.classList.remove("active");
