@@ -275,75 +275,74 @@
   }
 
   // ── Live mode ────────────────────────────────────────────────────
-  const SEGMENT_MS = 4000;
-  let liveStream = null, liveRecorder = null;
-  let isLive = false, liveText = "", segTimer = null;
-  let allChunks = [], liveMimeType = "";
+  const WS_URL = "ws://localhost:8000/ws/live";
+  let audioCtx = null, processor = null, micStream = null, liveWs = null;
+  let liveText = "", allChunks = [], liveMimeType = "", liveRecorder = null;
 
   async function startLive() {
     try {
-      liveStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (e) {
       liveStatus.textContent = "Mic access denied: " + e.message; return;
     }
-    isLive = true; liveText = ""; allChunks = [];
+    liveText = ""; allChunks = [];
     livePlayerWrap.style.display = "none"; livePlayer.src = "";
-    liveResult.className = "result-box"; liveResult.textContent = "";
+    liveResult.className = "result-box placeholder"; liveResult.textContent = "";
     btnLiveStart.disabled = true; btnLiveStop.disabled = false;
     pulse.classList.add("active");
-    liveStatus.textContent = "Recording…";
-    recordSegment();
+    liveStatus.textContent = "Calibrating…";
+
+    audioCtx = new AudioContext({ sampleRate: 16000 });
+    const source = audioCtx.createMediaStreamSource(micStream);
+    processor = audioCtx.createScriptProcessor(512, 1, 1);
+
+    liveWs = new WebSocket(WS_URL);
+    liveWs.onopen = () => { liveStatus.textContent = "Recording…"; };
+    liveWs.onmessage = (e) => {
+      const d = JSON.parse(e.data);
+      if (d.text) {
+        liveText += (liveText ? " " : "") + d.text;
+        liveResult.textContent = liveText;
+        liveResult.className = "result-box";
+      }
+    };
+    liveWs.onerror = () => { liveStatus.textContent = "Connection error"; stopLive(); };
+
+    processor.onaudioprocess = (e) => {
+      if (liveWs.readyState !== WebSocket.OPEN) return;
+      const pcm = e.inputBuffer.getChannelData(0);
+      liveWs.send(new Float32Array(pcm).buffer);
+    };
+    source.connect(processor);
+    processor.connect(audioCtx.destination);
+
+    // parallel MediaRecorder for playback blob
+    const mimeType = ["audio/webm;codecs=opus","audio/webm","audio/ogg;codecs=opus",""]
+      .find(t => t === "" || MediaRecorder.isTypeSupported(t));
+    liveRecorder = new MediaRecorder(micStream, mimeType ? { mimeType } : {});
+    liveMimeType = liveRecorder.mimeType;
+    liveRecorder.ondataavailable = e => { if (e.data.size > 0) allChunks.push(e.data); };
+    liveRecorder.start();
   }
 
   function stopLive() {
-    isLive = false;
-    clearTimeout(segTimer);
+    if (processor)    { processor.disconnect(); processor = null; }
+    if (audioCtx)     { audioCtx.close(); audioCtx = null; }
+    if (liveWs && liveWs.readyState === WebSocket.OPEN) liveWs.close();
     if (liveRecorder && liveRecorder.state === "recording") liveRecorder.stop();
-    if (liveStream) liveStream.getTracks().forEach(t => t.stop());
+    if (micStream)    { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+
     btnLiveStart.disabled = false; btnLiveStop.disabled = true;
     pulse.classList.remove("active");
     liveStatus.textContent = liveText ? "Stopped." : "Stopped — nothing recorded.";
-  }
 
-  function recordSegment() {
-    if (!isLive) return;
-    const chunks = [];
-    const mimeType = ["audio/webm;codecs=opus","audio/webm","audio/ogg;codecs=opus",""]
-      .find(t => t === "" || MediaRecorder.isTypeSupported(t));
-    liveRecorder = new MediaRecorder(liveStream, mimeType ? { mimeType } : {});
-    liveMimeType = liveRecorder.mimeType;
-    liveRecorder.ondataavailable = e => { if (e.data.size > 0) { chunks.push(e.data); allChunks.push(e.data); } };
-    liveRecorder.onstop = async () => {
-      if (!chunks.length) { if (isLive) recordSegment(); return; }
-      pulse.classList.remove("active");
-      liveStatus.textContent = "Transcribing segment…";
-      const blob = new Blob(chunks, { type: liveRecorder.mimeType || "audio/webm" });
-      try {
-        const fd = new FormData();
-        fd.append("file", blob, "segment.webm");
-        const r = await fetch(`${API}/transcribe`, { method: "POST", body: fd });
-        if (r.ok) {
-          const d = await r.json();
-          if (d.text?.trim()) {
-            liveText += (liveText ? " " : "") + d.text.trim();
-            liveResult.textContent = liveText;
-          }
-        }
-      } catch {}
-      if (isLive) {
-        pulse.classList.add("active");
-        liveStatus.textContent = "Recording…";
-        recordSegment();
-      } else if (allChunks.length) {
+    setTimeout(() => {
+      if (allChunks.length) {
         const blob = new Blob(allChunks, { type: liveMimeType || "audio/webm" });
         livePlayer.src = URL.createObjectURL(blob);
         livePlayerWrap.style.display = "block";
       }
-    };
-    liveRecorder.start();
-    segTimer = setTimeout(() => {
-      if (liveRecorder.state === "recording") liveRecorder.stop();
-    }, SEGMENT_MS);
+    }, 300);
   }
 </script>
 </body>

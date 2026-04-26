@@ -23,7 +23,9 @@ import time
 
 log = logging.getLogger(__name__)
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+import numpy as np
+
+from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -171,6 +173,62 @@ async def transcribe_stream(file: UploadFile = File(...)):
             tmp_path.unlink(missing_ok=True)
 
     return StreamingResponse(_generate(), media_type="text/event-stream")
+
+
+@app.websocket("/ws/live")
+async def live_ws(websocket: WebSocket):
+    await websocket.accept()
+    from local_stt_he.api import _get_config, _get_engine
+
+    cfg    = _get_config("streaming")
+    engine = _get_engine(cfg)
+
+    _SAMPLE_RATE          = 16000
+    _BLOCK_SIZE           = 512
+    _VAD_SILENCE_FRAMES   = int(0.5 * _SAMPLE_RATE / _BLOCK_SIZE)  # 500ms
+    _MAX_FRAMES           = int(28.0 * _SAMPLE_RATE / _BLOCK_SIZE)
+
+    cal_blocks: list  = []
+    rms_threshold     = None
+    audio_buf         = np.array([], dtype=np.float32)
+    silence_count     = 0
+
+    def _transcribe(chunk: np.ndarray) -> str:
+        result = engine.transcribe(chunk, bucket="streaming")
+        return result.text.strip()
+
+    async def _emit(chunk: np.ndarray) -> None:
+        text = await asyncio.to_thread(_transcribe, chunk)
+        if text:
+            print(f"[ws/live]    {text}", flush=True)
+            await websocket.send_json({"text": text})
+
+    try:
+        while True:
+            data  = await websocket.receive_bytes()
+            block = np.frombuffer(data, dtype=np.float32).copy()
+
+            if rms_threshold is None:
+                cal_blocks.append(block)
+                if sum(len(b) for b in cal_blocks) >= _SAMPLE_RATE:
+                    cal = np.concatenate(cal_blocks)
+                    rms_threshold = max(float(np.sqrt(np.mean(cal ** 2))) * 1.5, 1e-4)
+                    print(f"[ws/live]    calibrated noise floor: {rms_threshold:.5f}", flush=True)
+                continue
+
+            audio_buf = np.concatenate([audio_buf, block])
+            rms = float(np.sqrt(np.mean(block ** 2)))
+            silence_count = silence_count + 1 if rms < rms_threshold else 0
+
+            buf_frames = len(audio_buf) / _BLOCK_SIZE
+            if (silence_count >= _VAD_SILENCE_FRAMES or buf_frames >= _MAX_FRAMES) \
+                    and buf_frames > _VAD_SILENCE_FRAMES:
+                chunk, audio_buf, silence_count = audio_buf.copy(), np.array([], dtype=np.float32), 0
+                await _emit(chunk)
+
+    except WebSocketDisconnect:
+        if rms_threshold is not None and len(audio_buf) > _BLOCK_SIZE * 2:
+            await _emit(audio_buf)
 
 
 def main() -> None:
