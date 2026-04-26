@@ -289,7 +289,6 @@
     livePlayerWrap.style.display = "none"; livePlayer.src = "";
     liveResult.className = "result-box placeholder"; liveResult.textContent = "";
     btnLiveStart.disabled = true; btnLiveStop.disabled = false;
-    pulse.classList.add("active");
     liveStatus.textContent = "Calibrating…";
 
     audioCtx = new AudioContext({ sampleRate: 16000 });
@@ -297,10 +296,13 @@
     processor = audioCtx.createScriptProcessor(512, 1, 1);
 
     liveWs = new WebSocket(WS_URL);
-    liveWs.onopen = () => { liveStatus.textContent = "Recording…"; };
+    liveWs.onopen = () => { liveStatus.textContent = "Calibrating…"; };
     liveWs.onmessage = (e) => {
       const d = JSON.parse(e.data);
-      if (d.text) {
+      if (d.status === "ready") {
+        liveStatus.textContent = "Recording…";
+        pulse.classList.add("active");
+      } else if (d.text) {
         liveText += (liveText ? " " : "") + d.text;
         liveResult.textContent = liveText;
         liveResult.className = "result-box";

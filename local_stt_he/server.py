@@ -215,10 +215,14 @@ async def live_ws(websocket: WebSocket):
 
             if rms_threshold is None:
                 cal_blocks.append(block)
-                if sum(len(b) for b in cal_blocks) >= _SAMPLE_RATE:
-                    cal = np.concatenate(cal_blocks)
-                    rms_threshold = max(float(np.sqrt(np.mean(cal ** 2))) * 1.5, 1e-4)
+                if sum(len(b) for b in cal_blocks) >= _SAMPLE_RATE // 2:  # 0.5s
+                    # use minimum block RMS so speech during cal doesn't skew threshold
+                    block_rms = [float(np.sqrt(np.mean(b ** 2))) for b in cal_blocks]
+                    rms_threshold = max(min(block_rms) * 2.0, 1e-4)
                     print(f"[ws/live]    calibrated noise floor: {rms_threshold:.5f}", flush=True)
+                    await websocket.send_json({"status": "ready"})
+                    # include cal audio in buffer in case user was already speaking
+                    audio_buf = np.concatenate(cal_blocks)
                 continue
 
             audio_buf = np.concatenate([audio_buf, block])
