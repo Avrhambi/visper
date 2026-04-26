@@ -100,8 +100,7 @@ async def transcribe_endpoint(file: UploadFile = File(...)):
         elapsed = time.monotonic() - t0
 
         rtf = round(elapsed / audio_duration, 3) if audio_duration else None
-        log.info("[transcribe] audio=%.1fs  duration=%.1fs  RTF=%s",
-                 audio_duration or 0, elapsed, rtf)
+        print(f"[transcribe] audio={audio_duration or 0:.1f}s  duration={elapsed:.1f}s  RTF={rtf}", flush=True)
         return {"text": text, "segments": segments, "rtf": rtf, "elapsed": round(elapsed, 1)}
     except Exception as e:
         log.exception("Transcription failed")
@@ -128,8 +127,7 @@ async def transcribe_stream(file: UploadFile = File(...)):
             transcribe_chunked(str(tmp_path), lambda seg: q.put(seg))
             elapsed = time.monotonic() - t0
             rtf = round(elapsed / audio_duration, 3) if audio_duration else None
-            log.info("[stream]     audio=%.1fs  duration=%.1fs  RTF=%s",
-                     audio_duration or 0, elapsed, rtf)
+            print(f"[stream]     audio={audio_duration or 0:.1f}s  duration={elapsed:.1f}s  RTF={rtf}", flush=True)
         except Exception as e:
             q.put({"error": str(e)})
         finally:
