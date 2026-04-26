@@ -119,8 +119,8 @@ class LiveStreamer:
         }
 
     def start(self) -> None:
-        from local_stt_he.transcriber import Transcriber
-        self._transcriber = Transcriber(self._config)
+        from local_stt_he.api import _get_engine
+        self._transcriber = _get_engine(self._config)
         self._stop_event.clear()
         self._running = True
 
@@ -445,9 +445,9 @@ class LiveStreamer:
             print("[STT] Idle — model unloaded to free memory", file=sys.stderr)
 
     def _reload_model(self) -> None:
-        from local_stt_he.transcriber import Transcriber
+        from local_stt_he.api import _get_engine
         print("[STT] Speech detected — reloading model...", file=sys.stderr)
-        self._transcriber = Transcriber(self._config)
+        self._transcriber = _get_engine(self._config)
 
     # ------------------------------------------------------------------
     # Memory monitor
