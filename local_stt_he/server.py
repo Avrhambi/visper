@@ -29,7 +29,6 @@ import numpy as np
 from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
 
 def _register_cuda_dlls() -> None:
     """Add nvidia package DLL folders to PATH so cublas/cudnn are found at runtime."""
@@ -47,8 +46,6 @@ _register_cuda_dlls()
 
 app = FastAPI(title="Hebrew STT", version="0.2.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
-import re
 
 async def _save_upload(file: UploadFile) -> pathlib.Path:
     suffix = pathlib.Path(file.filename or "audio.wav").suffix or ".wav"

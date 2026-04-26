@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>תמלול עברי - Workspace</title>
+  <title>וִויסְפֶּר - תמלול בעברית </title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='2' y='2' width='20' height='20' rx='5' fill='%232563EB'/><rect x='6' y='10' width='3' height='4' rx='1' fill='white'/><rect x='10.5' y='6' width='3' height='12' rx='1' fill='white'/><rect x='15' y='8' width='3' height='8' rx='1' fill='white'/></svg>">
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -53,27 +55,42 @@
 
     /* ── Header ── */
     header {
-      text-align: center;
-      padding: 1.5rem 0;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      background: rgba(249, 250, 251, 0.8);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
       width: 100%;
-      border-bottom: 1px solid transparent;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1rem 0 3.5rem;
       transition: var(--transition);
-    }
-    header.scrolled {
-      border-bottom-color: var(--border-light);
-      padding: 1rem 0;
+      gap: 0.75rem;
     }
     header h1 {
-      font-size: 1.25rem;
-      font-weight: 600;
-      letter-spacing: -0.02em;
+      font-size: 2.5rem;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      color: #111827;
+      margin: 0;
+      padding-right: 5rem; /* Nudge left to balance RTL text weight */
     }
+    header h1 i,
+    header h1 svg {
+      stroke: #2563EB !important;
+      color: #2563EB !important;
+      width: 48px;
+      height: 48px;
+      stroke-width: 3px;
+      flex-shrink: 0;
+    }
+    header h3 {
+      font-size: 1.0625rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      letter-spacing: -0.01em;
+      margin: 0;
+    }
+
 
     /* ── Tabs (Main) ── */
     .nav-container {
@@ -531,11 +548,12 @@
 </head>
 <body>
 
-<header id="mainHeader">
-  <h1></h1>
-</header>
-
 <div class="shell">
+  <header id="mainHeader">
+    <h1>וִויסְפֶּר <i data-lucide="waveform"></i></h1>
+    <h3>מתמלל עברית מתקדם, מקומי וללא תלות בענן</h3>
+  </header>
+
   <div class="nav-container">
     <div class="nav-tabs">
       <button id="tabBtnCreate" class="nav-tab active" onclick="showTab('create')">
@@ -648,15 +666,10 @@
 
   // ── Init ─────────────────────────────────────────────────────────
   window.addEventListener('DOMContentLoaded', () => {
-    lucide.createIcons();
     loadHistory();
     checkHealth();
     setInterval(checkHealth, 30000);
-
-    // Scroll effect for header
-    window.addEventListener('scroll', () => {
-      document.getElementById('mainHeader').classList.toggle('scrolled', window.scrollY > 20);
-    });
+    lucide.createIcons();
   });
 
   async function checkHealth() {
