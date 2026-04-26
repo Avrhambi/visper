@@ -81,8 +81,16 @@
     .meta { font-size: .78rem; color: #aaa; margin-top: .5rem; text-align: right; }
 
     /* audio player */
-    .audio-player { margin-bottom: 1rem; display: none; }
+    .audio-player { margin-bottom: 1rem; display: none; position: relative; }
     .audio-player audio { width: 100%; border-radius: 8px; }
+    .audio-remove {
+      position: absolute; top: 50%; right: 0; transform: translateY(-50%);
+      width: 22px; height: 22px; border-radius: 50%;
+      background: #bbb; color: white; border: none; cursor: pointer;
+      font-size: .8rem; line-height: 22px; text-align: center; padding: 0;
+      transition: background .15s;
+    }
+    .audio-remove:hover { background: #e04040; }
 
     /* live indicator */
     .live-info { font-size: .83rem; color: #888; margin-bottom: .75rem; line-height: 1.5; }
@@ -126,7 +134,8 @@
     </div>
 
     <div class="audio-player" id="filePlayerWrap">
-      <audio id="filePlayer" controls></audio>
+      <audio id="filePlayer" controls style="width:calc(100% - 30px)"></audio>
+      <button class="audio-remove" onclick="clearFile()" title="Remove file">✕</button>
     </div>
 
     <div class="buttons">
@@ -209,6 +218,16 @@
     const dt = new DataTransfer(); dt.items.add(f);
     fileInput.files = dt.files; fileInput.dispatchEvent(new Event("change"));
   });
+
+  function clearFile() {
+    fileInput.value = "";
+    fileName.textContent = "";
+    filePlayer.src = ""; filePlayerWrap.style.display = "none";
+    btnFull.disabled = true;
+    fileResult.className = "result-box placeholder";
+    fileResult.textContent = "Transcript will appear here…";
+    fileMeta.textContent = ""; fileStatus.textContent = "";
+  }
 
   // ── Transcription (streaming) ────────────────────────────────────
   async function transcribe() {
