@@ -441,6 +441,25 @@
       box-shadow: var(--shadow-sm);
     }
 
+    .lib-text-display {
+      width: 100%;
+      padding: 1.25rem;
+      font-size: 1.0625rem;
+      line-height: 1.8;
+      color: var(--text);
+      direction: rtl;
+      white-space: pre-wrap;
+      background: #F9FAFB;
+      border-radius: var(--radius-lg);
+      border: 1px solid transparent;
+      min-height: 120px;
+    }
+
+    .lib-item.editing .lib-text-display { display: none; }
+    .lib-item:not(.editing) .lib-textarea { display: none; }
+    .lib-item:not(.editing) .btn-save-edit { display: none; }
+    .lib-item.editing .btn-start-edit { display: none; }
+
     .save-indicator {
       position: absolute; top: 0.5rem; left: 0.5rem;
       font-size: 0.75rem; color: var(--success);
@@ -712,6 +731,8 @@
     document.getElementById('wsModeTitle').textContent = title;
     document.getElementById('wsResult').innerHTML = "";
     document.getElementById('wsStatusText').textContent = "";
+    document.getElementById('btnStop').disabled = false;
+    document.getElementById('btnStop').style.opacity = "1";
     document.getElementById('btnPause').style.display = mode === 'live' ? 'flex' : 'none';
     document.getElementById('liveMeter').style.display = mode === 'live' ? 'block' : 'none';
   }
@@ -808,6 +829,10 @@
     catch(e) { alert("גישה למיקרופון נדחתה"); return; }
 
     showWorkspace('live', "הקלטה חיה");
+    document.getElementById('wsStatusText').textContent = "כיול...";
+    document.getElementById('btnStop').disabled = true;
+    document.getElementById('btnStop').style.opacity = "0.5";
+    
     document.getElementById('micButton').classList.add('active');
     liveText = ""; allChunks = []; isPaused = false;
 
@@ -821,6 +846,9 @@
       const d = JSON.parse(data);
       if (d.status === "ready") {
         isRecording = true;
+        document.getElementById('wsStatusText').textContent = "";
+        document.getElementById('btnStop').disabled = false;
+        document.getElementById('btnStop').style.opacity = "1";
         animateMeter();
       } else if (d.text) {
         const chunk = d.text.trim();
@@ -956,10 +984,17 @@
           <div id="save-${item.id}" class="save-indicator">
             <i data-lucide="check" size="14"></i> נשמר
           </div>
-          <textarea class="lib-textarea" oninput="autoSave(${item.id}, this.value)">${item.text}</textarea>
+          <div id="display-${item.id}" class="lib-text-display"></div>
+          <textarea id="edit-${item.id}" class="lib-textarea" oninput="autoSave(${item.id}, this.value)" spellcheck="true"></textarea>
         </div>
         ${item.audioUrl ? `<audio class="lib-audio" src="${item.audioUrl}" controls></audio>` : ''}
         <div class="lib-actions">
+          <button class="icon-btn btn-start-edit" onclick="toggleEdit(${item.id})">
+            <i data-lucide="edit-3"></i> עריכה
+          </button>
+          <button class="icon-btn btn-save-edit" onclick="toggleEdit(${item.id})">
+            <i data-lucide="check"></i> סיום
+          </button>
           <button class="icon-btn" onclick="copyTextFromItem(${item.id})">
             <i data-lucide="copy" stroke-width="1.5"></i> העתק
           </button>
@@ -972,12 +1007,32 @@
         </div>
       </div>
     `;
+    
+    // Set text safely
+    div.querySelector(`#display-${item.id}`).textContent = item.text;
+    div.querySelector(`#edit-${item.id}`).value = item.text;
+    
     return div;
   }
 
   function toggleExpand(id) {
     const el = document.getElementById(`item-${id}`);
     el.classList.toggle('expanded');
+  }
+
+  function toggleEdit(id) {
+    const el = document.getElementById(`item-${id}`);
+    const isEditing = el.classList.toggle('editing');
+    
+    if (!isEditing) {
+      // Refresh display text from textarea
+      const txt = document.getElementById(`edit-${id}`).value;
+      document.getElementById(`display-${id}`).textContent = txt;
+    } else {
+      // Focus textarea
+      setTimeout(() => document.getElementById(`edit-${id}`).focus(), 50);
+    }
+    lucide.createIcons();
   }
 
   let saveTimeouts = {};

@@ -379,6 +379,7 @@ class Transcriber:
     def _transcribe_via_worker(
         self, source, bucket: str, params, vad_filter: bool,
         vad_min_silence_ms: int, vad_speech_pad_ms: int,
+        is_aborted: Optional[Callable[[], bool]] = None,
     ) -> TranscriptResult:
         """Send a transcription request to the venv worker subprocess."""
         t0 = time.time()
