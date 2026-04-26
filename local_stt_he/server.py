@@ -100,8 +100,8 @@ async def transcribe_endpoint(file: UploadFile = File(...)):
         elapsed = time.monotonic() - t0
 
         rtf = round(elapsed / audio_duration, 3) if audio_duration else None
-        dur_str = f"{audio_duration:.1f}s" if audio_duration else "unknown"
-        log.info("transcribed: audio=%s  time=%.1fs  RTF=%s", dur_str, elapsed, rtf)
+        log.info("[transcribe] audio=%.1fs  duration=%.1fs  RTF=%s",
+                 audio_duration or 0, elapsed, rtf)
         return {"text": text, "segments": segments, "rtf": rtf, "elapsed": round(elapsed, 1)}
     except Exception as e:
         log.exception("Transcription failed")
@@ -118,8 +118,18 @@ async def transcribe_stream(file: UploadFile = File(...)):
 
     def _run() -> None:
         try:
+            import soundfile as sf
             from local_stt_he.api import transcribe_chunked
+            try:
+                audio_duration = sf.info(str(tmp_path)).duration
+            except Exception:
+                audio_duration = None
+            t0 = time.monotonic()
             transcribe_chunked(str(tmp_path), lambda seg: q.put(seg))
+            elapsed = time.monotonic() - t0
+            rtf = round(elapsed / audio_duration, 3) if audio_duration else None
+            log.info("[stream]     audio=%.1fs  duration=%.1fs  RTF=%s",
+                     audio_duration or 0, elapsed, rtf)
         except Exception as e:
             q.put({"error": str(e)})
         finally:
