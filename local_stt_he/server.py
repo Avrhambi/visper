@@ -116,13 +116,10 @@ async def transcribe_stream(file: UploadFile = File(...)):
     q: queue.Queue = queue.Queue()
     _sentinel = object()
 
-    def on_transcript(text: str, is_final: bool) -> None:
-        q.put({"text": text, "is_final": is_final})
-
     def _run() -> None:
         try:
-            from local_stt_he.api import stream_transcribe
-            stream_transcribe(on_transcript, str(tmp_path))
+            from local_stt_he.api import transcribe_chunked
+            transcribe_chunked(str(tmp_path), lambda seg: q.put(seg))
         except Exception as e:
             q.put({"error": str(e)})
         finally:

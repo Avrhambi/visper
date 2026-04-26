@@ -245,8 +245,10 @@
           try {
             const d = JSON.parse(line.slice(6));
             if (d.error) { fileStatus.textContent = "Error: " + d.error; break; }
-            fileResult.textContent += (fileResult.textContent ? " " : "") + d.text;
-            fileStatus.textContent = `Streaming… (${++segCount} segment${segCount !== 1 ? "s" : ""})`;
+            if (d.text?.trim()) {
+              fileResult.textContent += (fileResult.textContent ? " " : "") + d.text.trim();
+              fileStatus.textContent = `Streaming… (${++segCount} segment${segCount !== 1 ? "s" : ""})`;
+            }
           } catch {}
         }
       }
