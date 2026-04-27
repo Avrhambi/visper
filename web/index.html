@@ -544,6 +544,52 @@
       100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
     }
     .status-dot.err { background: var(--danger); }
+
+    /* ── Segment Click-to-Seek ── */
+    .seg-span {
+      cursor: pointer;
+      border-radius: 3px;
+      padding: 1px 2px;
+      transition: background 0.15s;
+      display: inline;
+    }
+    .seg-clickable { cursor: pointer; }
+    .seg-span:hover { background: rgba(37, 99, 235, 0.08); }
+    .seg-active { background: rgba(37, 99, 235, 0.13); }
+
+    /* ── Download Dropdown ── */
+    .dl-wrapper { position: relative; display: inline-flex; flex-direction: column; align-items: center; }
+    .dl-menu {
+      display: none;
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-md);
+      z-index: 200;
+      min-width: 96px;
+      overflow: hidden;
+    }
+    .dl-menu.open { display: block; }
+    .dl-option {
+      display: block;
+      width: 100%;
+      padding: 9px 16px;
+      text-align: center;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      font-family: 'Assistant', sans-serif;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      color: var(--text);
+      transition: background 0.15s;
+    }
+    .dl-option:hover:not(:disabled) { background: var(--border-light); }
+    .dl-option:disabled { color: var(--text-muted); cursor: not-allowed; opacity: 0.5; }
   </style>
 </head>
 <body>
@@ -670,6 +716,9 @@
     checkHealth();
     setInterval(checkHealth, 30000);
     lucide.createIcons();
+    document.addEventListener('click', () => {
+      document.querySelectorAll('.dl-menu.open').forEach(m => m.classList.remove('open'));
+    });
   });
 
   async function checkHealth() {
@@ -793,8 +842,8 @@
       const reader = r.body.getReader();
       currentFileReader = reader;
       const dec = new TextDecoder();
-      let fullText = "", buf = "";
-      
+      let fullText = "", buf = "", segments = [];
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -803,10 +852,14 @@
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
           let d; try { d = JSON.parse(line.slice(6)); } catch { continue; }
+          if (d.error) throw new Error(d.error);
           if (d.text?.trim()) {
             const chunk = d.text.trim();
             fullText += (fullText ? " " : "") + chunk;
             appendChunk(chunk);
+            if (typeof d.start === 'number' && typeof d.end === 'number') {
+              segments.push({ start: d.start, end: d.end, text: d.text });
+            }
           }
         }
       }
@@ -822,6 +875,7 @@
         title: file.name,
         date: new Date().toLocaleString('he-IL'),
         text: fullText || "(לא זוהה דיבור)",
+        segments: segments.length > 0 ? segments : null,
         type: 'file',
         audioUrl: URL.createObjectURL(file)
       };
@@ -834,7 +888,7 @@
   }
 
   // ── Live Mic Logic ──────────────────────────────────────────────
-  let audioCtx, processor, analyser, micStream, liveWs, liveRecorder, liveMime, allChunks, liveText;
+  let audioCtx, processor, analyser, micStream, liveWs, liveRecorder, liveMime, allChunks, liveText, liveSegments;
   let meterRaf;
 
   async function startLive() {
@@ -847,7 +901,7 @@
     document.getElementById('btnStop').style.opacity = "0.5";
     
     document.getElementById('micButton').classList.add('active');
-    liveText = ""; allChunks = []; isPaused = false;
+    liveText = ""; allChunks = []; liveSegments = []; isPaused = false;
 
     audioCtx = new AudioContext({ sampleRate:16000 });
     const src = audioCtx.createMediaStreamSource(micStream);
@@ -867,6 +921,7 @@
         const chunk = d.text.trim();
         liveText += (liveText?" ":"") + chunk;
         appendChunk(chunk);
+        if (d.segments?.length) liveSegments.push(...d.segments);
       }
     };
     liveWs.onclose = () => onSessionEnd();
@@ -920,6 +975,7 @@
       title: "הקלטה חיה",
       date: new Date().toLocaleString('he-IL'),
       text: liveText,
+      segments: liveSegments.length > 0 ? liveSegments : null,
       type: 'live',
       audioUrl: blob ? URL.createObjectURL(blob) : null
     };
@@ -955,14 +1011,24 @@
 
   function saveHistory() {
     const serializable = historyData.map(d => ({ ...d, audioUrl: null }));
-    localStorage.setItem("stt_history_v3", JSON.stringify(serializable));
+    localStorage.setItem("stt_history_v4", JSON.stringify(serializable));
   }
 
   function loadHistory() {
-    const saved = localStorage.getItem("stt_history_v3");
-    if (saved) {
-      try { historyData = JSON.parse(saved); renderLibrary(); } catch(e) {}
+    let saved = localStorage.getItem("stt_history_v4");
+    if (!saved) {
+      const old = localStorage.getItem("stt_history_v3");
+      if (old) {
+        try {
+          historyData = JSON.parse(old).map(i => ({ ...i, segments: i.segments || null }));
+          saveHistory();
+          localStorage.removeItem("stt_history_v3");
+          renderLibrary();
+        } catch(e) {}
+      }
+      return;
     }
+    try { historyData = JSON.parse(saved); renderLibrary(); } catch(e) {}
   }
 
   function renderLibrary() {
@@ -1011,9 +1077,17 @@
           <button class="icon-btn" onclick="copyTextFromItem(${item.id})">
             <i data-lucide="copy" stroke-width="1.5"></i> העתק
           </button>
-          <button class="icon-btn" onclick="downloadItem(${item.id})">
-            <i data-lucide="download" stroke-width="1.5"></i> הורד
-          </button>
+          <div class="dl-wrapper">
+            <button class="icon-btn" onclick="toggleDlMenu(event, ${item.id})">
+              <i data-lucide="download" stroke-width="1.5"></i> הורד
+            </button>
+            <div id="dlmenu-${item.id}" class="dl-menu">
+              <button class="dl-option" onclick="downloadAs(${item.id}, 'txt')">TXT</button>
+              <button class="dl-option" id="dl-srt-${item.id}" onclick="downloadAs(${item.id}, 'srt')">SRT</button>
+              <button class="dl-option" id="dl-vtt-${item.id}" onclick="downloadAs(${item.id}, 'vtt')">VTT</button>
+              <button class="dl-option" id="dl-json-${item.id}" onclick="downloadAs(${item.id}, 'json')">JSON</button>
+            </div>
+          </div>
           <button class="icon-btn danger" onclick="deleteItem(${item.id})">
             <i data-lucide="trash-2" stroke-width="1.5"></i> מחק
           </button>
@@ -1022,10 +1096,48 @@
     `;
     
     // Set text safely
-    div.querySelector(`#display-${item.id}`).textContent = item.text;
+    renderDisplayText(item, div.querySelector(`#display-${item.id}`));
     div.querySelector(`#edit-${item.id}`).value = item.text;
-    
+
+    // Click-to-seek: attach timeupdate listener if segments + audio are present
+    if (item.segments?.length && item.audioUrl) {
+      const audio = div.querySelector('.lib-audio');
+      audio.addEventListener('timeupdate', () => {
+        const t = audio.currentTime;
+        div.querySelectorAll('.seg-span').forEach(span => {
+          span.classList.toggle('seg-active',
+            t >= parseFloat(span.dataset.start) && t < parseFloat(span.dataset.end));
+        });
+      });
+    }
+
     return div;
+  }
+
+  function renderDisplayText(item, el) {
+    if (item.segments?.length) {
+      el.innerHTML = '';
+      item.segments.forEach(seg => {
+        const span = document.createElement('span');
+        span.className = item.audioUrl ? 'seg-span seg-clickable' : 'seg-span';
+        span.textContent = seg.text.trim() + ' ';
+        span.dataset.start = seg.start;
+        span.dataset.end   = seg.end;
+        if (item.audioUrl) {
+          span.onclick = (e) => { e.stopPropagation(); seekAudio(item.id, seg.start); };
+        }
+        el.appendChild(span);
+      });
+    } else {
+      el.textContent = item.text;
+    }
+  }
+
+  function seekAudio(id, start) {
+    const audio = document.querySelector(`#item-${id} .lib-audio`);
+    if (!audio) return;
+    audio.currentTime = start;
+    audio.play();
   }
 
   function toggleExpand(id) {
@@ -1038,9 +1150,10 @@
     const isEditing = el.classList.toggle('editing');
     
     if (!isEditing) {
-      // Refresh display text from textarea
       const txt = document.getElementById(`edit-${id}`).value;
-      document.getElementById(`display-${id}`).textContent = txt;
+      const item = historyData.find(i => i.id === id);
+      const el   = document.getElementById(`display-${id}`);
+      if (item) renderDisplayText(item, el); else el.textContent = txt;
     } else {
       // Focus textarea
       setTimeout(() => document.getElementById(`edit-${id}`).focus(), 50);
@@ -1068,14 +1181,56 @@
     if (item) copyText(item.text);
   }
 
-  function downloadItem(id) {
+  function toggleDlMenu(e, id) {
+    e.stopPropagation();
+    const menu = document.getElementById(`dlmenu-${id}`);
     const item = historyData.find(i => i.id === id);
-    if (item) {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([item.text], { type: 'text/plain;charset=utf-8' }));
-      a.download = `${item.title.replace(/\s+/g, '_')}.txt`;
-      a.click();
+    const hasSegments = item?.segments?.length > 0;
+    ['srt', 'vtt', 'json'].forEach(fmt => {
+      const btn = document.getElementById(`dl-${fmt}-${id}`);
+      if (btn) {
+        btn.disabled = !hasSegments;
+        btn.title = hasSegments ? '' : 'אין נתוני זמן זמינים';
+      }
+    });
+    document.querySelectorAll('.dl-menu.open').forEach(m => { if (m !== menu) m.classList.remove('open'); });
+    menu.classList.toggle('open');
+  }
+
+  function _ts_srt(s) {
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = Math.floor(s % 60);
+    const ms = Math.round((s - Math.floor(s)) * 1000);
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')},${String(ms).padStart(3,'0')}`;
+  }
+  function _ts_vtt(s) { return _ts_srt(s).replace(',', '.'); }
+
+  function formatSRT(segs) {
+    return segs.map((s, i) => `${i+1}\n${_ts_srt(s.start)} --> ${_ts_srt(s.end)}\n${s.text.trim()}\n`).join('\n');
+  }
+  function formatVTT(segs) {
+    return 'WEBVTT\n\n' + segs.map(s => `${_ts_vtt(s.start)} --> ${_ts_vtt(s.end)}\n${s.text.trim()}\n`).join('\n');
+  }
+
+  function downloadAs(id, fmt) {
+    const item = historyData.find(i => i.id === id);
+    if (!item) return;
+    let content, mime, ext;
+    const base = item.title.replace(/\.[^.]+$/, '').replace(/\s+/g, '_');
+    if (fmt === 'txt') {
+      content = item.text; mime = 'text/plain;charset=utf-8'; ext = 'txt';
+    } else if (fmt === 'srt') {
+      content = formatSRT(item.segments); mime = 'text/srt;charset=utf-8'; ext = 'srt';
+    } else if (fmt === 'vtt') {
+      content = formatVTT(item.segments); mime = 'text/vtt;charset=utf-8'; ext = 'vtt';
+    } else if (fmt === 'json') {
+      content = JSON.stringify({ title: item.title, date: item.date, text: item.text, segments: item.segments }, null, 2);
+      mime = 'application/json;charset=utf-8'; ext = 'json';
     }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([content], { type: mime }));
+    a.download = `${base}.${ext}`;
+    a.click();
+    document.querySelectorAll('.dl-menu.open').forEach(m => m.classList.remove('open'));
   }
 
   function deleteItem(id) {

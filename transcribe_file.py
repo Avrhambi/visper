@@ -39,9 +39,6 @@ import time
 
 ROOT = Path(__file__).parent
 
-# Long-file threshold for auto-enabling progress output
-_AUTO_PROGRESS_BUCKETS = {"long", "extended"}
-
 
 def _resolve_bucket(path: Path, bucket: str) -> str:
     if bucket != "auto":
@@ -119,6 +116,22 @@ def _format_srt(result) -> str:
     return "\n".join(lines)
 
 
+def _format_vtt(result) -> str:
+    if not result.segments:
+        return result.text
+    def _ts(s):
+        h, rem = divmod(int(s), 3600)
+        m, sec = divmod(rem, 60)
+        ms = int((s - int(s)) * 1000)
+        return f"{h:02}:{m:02}:{sec:02}.{ms:03}"
+    lines = ["WEBVTT", ""]
+    for seg in result.segments:
+        lines.append(f"{_ts(seg['start'])} --> {_ts(seg['end'])}")
+        lines.append(seg["text"].strip())
+        lines.append("")
+    return "\n".join(lines)
+
+
 def _format_json(result) -> str:
     return json.dumps({
         "text": result.text,
@@ -150,25 +163,19 @@ def transcribe_one(path: Path, engine, args, cfg: dict) -> tuple[str, float]:
 
     print(f"[STT] Transcribing {path.name} (bucket={bucket})...", file=sys.stderr)
 
-    # Auto-enable progress for long/extended files unless explicitly suppressed
-    show_progress = getattr(args, "progress", False)
-    if not show_progress and bucket in _AUTO_PROGRESS_BUCKETS:
-        show_progress = True
-
-    if show_progress:
+    if getattr(args, "progress", False):
         def _progress_cb(seg: dict) -> None:
             print(f"  [{seg['start']:.1f}s] {seg['text'].strip()}", file=sys.stderr)
         result = engine.transcribe(source=path, bucket=bucket, on_segment=_progress_cb)
     else:
         result = engine.transcribe(source=path, bucket=bucket)
 
-    print(f"[STT] Done — RTF {result.rtf:.3f} ({_rtf_speed_label(result.rtf)}) "
-          f"| {result.audio_duration:.1f}s audio in {result.elapsed:.1f}s",
-          file=sys.stderr)
-
     if fmt == "srt":
         text_out = _format_srt(result)
         ext = ".srt"
+    elif fmt == "vtt":
+        text_out = _format_vtt(result)
+        ext = ".vtt"
     elif fmt == "json":
         text_out = _format_json(result)
         ext = ".json"
@@ -176,14 +183,13 @@ def transcribe_one(path: Path, engine, args, cfg: dict) -> tuple[str, float]:
         text_out = _format_txt(result)
         ext = ".txt"
 
-    if cfg.get("print_to_stdout", True):
-        print(text_out)
-
     write_file = cfg.get("write_output_file", True) and not args.no_file
     if write_file:
         out_path = path.with_suffix(ext)
         out_path.write_text(text_out, encoding="utf-8")
         print(f"[STT] Written to {out_path}", file=sys.stderr)
+    else:
+        print(text_out)
 
     if args.clip:
         try:
@@ -199,7 +205,7 @@ def transcribe_one(path: Path, engine, args, cfg: dict) -> tuple[str, float]:
 def main():
     parser = argparse.ArgumentParser(description="Transcribe Hebrew audio file(s)")
     parser.add_argument("files", nargs="+", help="Audio file(s) to transcribe")
-    parser.add_argument("--output", choices=["txt", "srt", "json"],
+    parser.add_argument("--output", choices=["txt", "srt", "vtt", "json"],
                         help="Output format (default: from config.yaml)")
     parser.add_argument("--bucket", default="auto",
                         choices=["auto", "short", "medium", "long", "extended"],
@@ -212,6 +218,14 @@ def main():
                         help="Print each segment to stderr as it is decoded")
     parser.add_argument("--background", action="store_true",
                         help="Run as background process (silent stdout)")
+    parser.add_argument("--accuracy",
+                        choices=["auto", "fast", "balanced", "accurate"],
+                        default=None,
+                        help="Override accuracy_mode from config.yaml")
+    parser.add_argument("--profile",
+                        choices=["foreground", "background", "minimal"],
+                        default=None,
+                        help="Override resource_profile from config.yaml")
     args = parser.parse_args()
 
     if args.background:
@@ -222,6 +236,17 @@ def main():
         sys.stdout = open(os.devnull, "w")
 
     cfg = _load_config()
+
+    if args.accuracy or args.profile:
+        import local_stt_he.params as _p
+        import local_stt_he.resource as _r
+        _override = dict(cfg)
+        if args.accuracy:
+            _override['accuracy_mode'] = args.accuracy
+        if args.profile:
+            _override['resource_profile'] = args.profile
+        _p._load_user_config = lambda: _override
+        _r._load_user_config = lambda: _override
 
     from local_stt_he.benchmark import get_best_config
     from local_stt_he.transcriber import Transcriber

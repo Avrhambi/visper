@@ -47,6 +47,10 @@ def main():
                         help="Print each segment with a timestamp as it arrives")
     parser.add_argument("--background", action="store_true",
                         help="Run as background process (detached)")
+    parser.add_argument("--accuracy",
+                        choices=["auto", "fast", "balanced", "accurate"],
+                        default=None,
+                        help="Override accuracy_mode from config.yaml")
     args = parser.parse_args()
 
     if args.background:
@@ -54,6 +58,18 @@ def main():
             if os.fork():
                 sys.exit(0)
         sys.stdout = open(os.devnull, "w")
+
+    if args.accuracy:
+        try:
+            import yaml as _yaml
+            from pathlib import Path as _Path
+            _cfg_path = _Path(__file__).parent / "config.yaml"
+            _cfg = _yaml.safe_load(_cfg_path.read_text()) if _cfg_path.exists() else {}
+            _cfg['accuracy_mode'] = args.accuracy
+        except Exception:
+            _cfg = {'accuracy_mode': args.accuracy}
+        import local_stt_he.params as _p
+        _p._load_user_config = lambda: _cfg
 
     from local_stt_he.benchmark import get_best_config
     from local_stt_he.streamer import LiveStreamer

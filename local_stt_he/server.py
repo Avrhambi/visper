@@ -206,16 +206,27 @@ async def live_ws(websocket: WebSocket):
     rms_threshold     = None
     audio_buf         = np.array([], dtype=np.float32)
     silence_count     = 0
+    audio_offset      = 0  # cumulative samples emitted so far
 
-    def _transcribe(chunk: np.ndarray) -> str:
+    def _transcribe(chunk: np.ndarray) -> tuple:
         result = engine.transcribe(chunk, bucket="streaming")
-        return result.text.strip()
+        return result.text.strip(), result.segments or []
 
     async def _emit(chunk: np.ndarray) -> None:
-        text = await asyncio.to_thread(_transcribe, chunk)
+        nonlocal audio_offset
+        offset_sec    = audio_offset / _SAMPLE_RATE
+        audio_offset += len(chunk)
+
+        text, segments = await asyncio.to_thread(_transcribe, chunk)
         if text:
+            shifted = [
+                {"start": round(s["start"] + offset_sec, 2),
+                 "end":   round(s["end"]   + offset_sec, 2),
+                 "text":  s["text"]}
+                for s in segments
+            ]
             print(f"[ws/live]    {text}", flush=True)
-            await websocket.send_json({"text": text})
+            await websocket.send_json({"text": text, "segments": shifted})
 
     try:
         while True:
