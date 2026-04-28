@@ -8,6 +8,11 @@
 language: "he"
 model_id: "ivrit-ai/whisper-large-v3-turbo-ct2"
 
+# Set to true to run noise reduction on audio before transcription.
+# Improves accuracy on recordings with background noise (fan, AC, crowd).
+# Adds ~1s of processing time per file. Requires noisereduce package.
+audio_denoise: false
+
 # ══ BASIC ════════════════════════════════════════════════════════════════════
 # These are the only settings most users ever need to change.
 

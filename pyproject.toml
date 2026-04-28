@@ -18,6 +18,7 @@ dependencies = [
     "pyyaml",
     "py-cpuinfo",
     "psutil",
+    "noisereduce",
 ]
 
 [project.optional-dependencies]

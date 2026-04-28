@@ -87,7 +87,7 @@ def health():
 
 
 @app.post("/transcribe")
-async def transcribe_endpoint(file: UploadFile = File(...), language: str = Form("he")):
+async def transcribe_endpoint(file: UploadFile = File(...), language: str = Form("he"), initial_prompt: str = Form("")):
     tmp_path = await _save_upload(file)
     try:
         import soundfile as sf
@@ -112,7 +112,8 @@ async def transcribe_endpoint(file: UploadFile = File(...), language: str = Form
         segments: list = []
         t0 = time.monotonic()
         text = await asyncio.to_thread(
-            transcribe_chunked, str(tmp_path), segments.append, bucket, None, language
+            transcribe_chunked, str(tmp_path), segments.append, bucket, None, language,
+            initial_prompt or None,
         )
         elapsed = time.monotonic() - t0
 
@@ -127,7 +128,7 @@ async def transcribe_endpoint(file: UploadFile = File(...), language: str = Form
 
 
 @app.post("/transcribe/stream")
-async def transcribe_stream(request: Request, file: UploadFile = File(...), language: str = Form("he")):
+async def transcribe_stream(request: Request, file: UploadFile = File(...), language: str = Form("he"), initial_prompt: str = Form("")):
     tmp_path = await _save_upload(file)
     q: queue.Queue = queue.Queue()
     _sentinel = object()
@@ -161,6 +162,7 @@ async def transcribe_stream(request: Request, file: UploadFile = File(...), lang
                 bucket,
                 is_aborted=lambda: abort_event.is_set(),
                 language=language,
+                initial_prompt=initial_prompt or None,
             )
             elapsed = time.monotonic() - t0
             if not abort_event.is_set():
@@ -211,7 +213,8 @@ async def live_ws(websocket: WebSocket):
     await websocket.accept()
     from local_stt_he.api import _get_config, _get_engine
 
-    language = websocket.query_params.get("language", "he")
+    language       = websocket.query_params.get("language", "he")
+    initial_prompt = websocket.query_params.get("initial_prompt", "") or None
     cfg    = _get_config("streaming")
     engine = _get_engine(cfg)
 
@@ -226,8 +229,8 @@ async def live_ws(websocket: WebSocket):
     silence_count     = 0
     audio_offset      = 0  # cumulative samples emitted so far
 
-    def _transcribe(chunk: np.ndarray) -> tuple:
-        result = engine.transcribe(chunk, bucket="streaming", language=language)
+    def _transcribe(chunk: np.ndarray, prompt: str = None) -> tuple:
+        result = engine.transcribe(chunk, bucket="streaming", language=language, initial_prompt=prompt)
         return result.text.strip(), result.segments or []
 
     async def _emit(chunk: np.ndarray) -> None:
@@ -235,7 +238,7 @@ async def live_ws(websocket: WebSocket):
         offset_sec    = audio_offset / _SAMPLE_RATE
         audio_offset += len(chunk)
 
-        text, segments = await asyncio.to_thread(_transcribe, chunk)
+        text, segments = await asyncio.to_thread(_transcribe, chunk, initial_prompt)
         if text:
             shifted = [
                 {"start": round(s["start"] + offset_sec, 2),

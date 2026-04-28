@@ -65,6 +65,7 @@ class Transcriber:
         self._vad_filter = True
         self._vad_min_silence_ms = 300
         self._vad_speech_pad_ms = 200
+        self._denoise = False
         try:
             import yaml as _yaml
             _cfg_path = ROOT / "config.yaml"
@@ -74,6 +75,7 @@ class Transcriber:
                 self._vad_filter = _ucfg.get("vad_filter", True)
                 self._vad_min_silence_ms = _ucfg.get("vad_min_silence_ms", 300)
                 self._vad_speech_pad_ms = _ucfg.get("vad_speech_pad_ms", 200)
+                self._denoise = _ucfg.get("audio_denoise", False)
         except Exception:
             pass
         self._backend_type = config["device"]
@@ -248,6 +250,7 @@ class Transcriber:
         _tier_override=None,
         is_aborted: Optional[Callable[[], bool]] = None,
         language: str = None,
+        initial_prompt: str = None,
     ) -> TranscriptResult:
         """
         source: file path or float32 numpy array at 16 kHz.
@@ -269,7 +272,7 @@ class Transcriber:
             return self._transcribe_via_worker(source, bucket, params,
                                                vad_filter, vad_min_silence_ms,
                                                vad_speech_pad_ms, is_aborted=is_aborted,
-                                               language=_lang)
+                                               language=_lang, initial_prompt=initial_prompt)
 
         t0 = time.time()
 
@@ -277,8 +280,16 @@ class Transcriber:
             audio = self._resolve_source(source)
             audio_duration = len(audio) / 16000.0 if isinstance(audio, np.ndarray) else self._get_duration(source)
 
+            if self._denoise and bucket != "streaming":
+                if not isinstance(audio, np.ndarray):
+                    audio = self._to_array(source)
+                audio = self._denoise_audio(audio)
+                audio_duration = len(audio) / 16000.0
+
             kwargs = params.as_transcribe_kwargs()
             kwargs["language"] = _lang
+            if initial_prompt:
+                kwargs["initial_prompt"] = initial_prompt
             kwargs["vad_filter"] = vad_filter
             kwargs["vad_parameters"] = dict(
                 min_silence_duration_ms=vad_min_silence_ms,
@@ -317,6 +328,8 @@ class Transcriber:
                     params = get_params_for_tier(upgrade, bucket, self._config)
                     kwargs2 = params.as_transcribe_kwargs()
                     kwargs2["language"] = _lang
+                    if initial_prompt:
+                        kwargs2["initial_prompt"] = initial_prompt
                     kwargs2["vad_filter"] = vad_filter
                     kwargs2["vad_parameters"] = dict(
                         min_silence_duration_ms=vad_min_silence_ms,
@@ -376,6 +389,7 @@ class Transcriber:
         vad_min_silence_ms: int, vad_speech_pad_ms: int,
         is_aborted: Optional[Callable[[], bool]] = None,
         language: str = None,
+        initial_prompt: str = None,
     ) -> TranscriptResult:
         """Send a transcription request to the venv worker subprocess."""
         t0 = time.time()
@@ -396,6 +410,8 @@ class Transcriber:
         kwargs = params.as_transcribe_kwargs()
         kwargs["language"] = _lang
         kwargs["language_token"] = f"<|{_lang}|>"
+        if initial_prompt:
+            kwargs["initial_prompt"] = initial_prompt
         kwargs["vad_filter"] = vad_filter
         kwargs["vad_parameters"] = dict(
             min_silence_duration_ms=vad_min_silence_ms,
@@ -472,6 +488,13 @@ class Transcriber:
             import librosa
             audio = librosa.resample(audio, orig_sr=sr, target_sr=16000)
         return audio
+
+    def _denoise_audio(self, audio: np.ndarray) -> np.ndarray:
+        try:
+            import noisereduce as nr
+            return nr.reduce_noise(y=audio, sr=16000).astype(np.float32)
+        except Exception:
+            return audio
 
     def _get_duration(self, source) -> float:
         try:

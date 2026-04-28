@@ -268,6 +268,23 @@
     }
     .file-chip-remove:hover { color: var(--danger); }
 
+    /* ── Batch Queue Panel ── */
+    .batch-panel { display: none; flex-direction: column; gap: 0.75rem; width: 100%; padding: 0.25rem 0; }
+    .batch-header { display: flex; justify-content: space-between; align-items: center; }
+    .batch-header-label { font-size: 0.875rem; font-weight: 600; color: var(--text); }
+    .batch-clear { background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 0.8125rem; padding: 0.25rem 0.5rem; border-radius: var(--radius-md); transition: var(--transition); }
+    .batch-clear:hover { color: var(--danger); background: #FEE2E2; }
+    .batch-list { display: flex; flex-direction: column; gap: 0.25rem; max-height: 180px; overflow-y: auto; }
+    .batch-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.75rem; background: var(--bg); border-radius: var(--radius-md); font-size: 0.8125rem; }
+    .batch-filename { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: ltr; text-align: left; color: var(--text); }
+    .batch-status { font-size: 0.75rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 999px; white-space: nowrap; flex-shrink: 0; }
+    .batch-status.queued     { background: #F3F4F6; color: var(--text-muted); }
+    .batch-status.processing { background: #DBEAFE; color: #1D4ED8; }
+    .batch-status.done       { background: #D1FAE5; color: #065F46; }
+    .batch-status.error      { background: #FEE2E2; color: #991B1B; }
+    .dropzone-folder-btn { background: none; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0.3rem 0.75rem; font-size: 0.75rem; color: var(--text-muted); cursor: pointer; display: inline-flex; align-items: center; gap: 0.35rem; transition: var(--transition); margin-top: 0.5rem; }
+    .dropzone-folder-btn:hover { color: var(--text); border-color: var(--text-muted); background: var(--bg); }
+
     .btn-obsidian {
       background: #1A1A1A;
       color: white;
@@ -621,6 +638,27 @@
       bottom: auto !important;
     }
 
+    /* ── Initial Prompt ── */
+    .prompt-wrap {
+      width: 100%;
+      padding: 0 0.25rem;
+    }
+    .prompt-input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 0.5rem 0.85rem;
+      font-size: 0.8125rem;
+      font-family: 'Assistant', sans-serif;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.2s;
+      direction: rtl;
+    }
+    .prompt-input:focus { border-color: #9CA3AF; }
+    .prompt-input::placeholder { color: var(--text-muted); opacity: 0.7; }
+
     /* ── Download Dropdown ── */
     .dl-wrapper { position: relative; display: inline-flex; flex-direction: column; align-items: center; }
     .dl-menu {
@@ -702,6 +740,13 @@
         </div>
       </div>
 
+      <!-- Initial Prompt -->
+      <div class="prompt-wrap">
+        <input type="text" id="promptInput" class="prompt-input"
+               placeholder="רמז ראשוני (אופציונלי) — שמות, מונחים, הקשר..."
+               oninput="initialPrompt = this.value.trim()">
+      </div>
+
       <!-- File Mode -->
       <div id="viewFile" class="dropzone" onclick="triggerFileUpload()">
         <div class="dropzone-icon">
@@ -711,10 +756,14 @@
           <h3>לחץ להעלאת קובץ שמע</h3>
           <p>MP3, WAV, M4A, FLAC נתמכים</p>
         </div>
-        <input type="file" id="fileInput" accept="audio/*" style="display:none">
+        <button class="dropzone-folder-btn" onclick="event.stopPropagation(); triggerFolderUpload()">
+          <i data-lucide="folder-open" size="14"></i> העלה תיקייה
+        </button>
+        <input type="file" id="fileInput" accept="audio/*" multiple style="display:none">
+        <input type="file" id="folderInput" accept="audio/*" webkitdirectory multiple style="display:none">
       </div>
 
-      <!-- File Selection (After picking file) -->
+      <!-- File Selection — single file -->
       <div id="viewFileSelected" class="file-selection">
         <div class="file-chip">
           <i data-lucide="file-audio" size="18"></i>
@@ -723,6 +772,18 @@
         </div>
         <button class="btn-obsidian" onclick="startFileTranscription()">
           תמלל עכשיו
+        </button>
+      </div>
+
+      <!-- File Selection — multiple files (batch) -->
+      <div id="viewFileBatch" class="batch-panel">
+        <div class="batch-header">
+          <span class="batch-header-label" id="batchCount"></span>
+          <button class="batch-clear" onclick="resetFileSelection()">ביטול</button>
+        </div>
+        <div id="batchList" class="batch-list"></div>
+        <button class="btn-obsidian" onclick="startBatchTranscription()">
+          תמלל הכל
         </button>
       </div>
 
@@ -790,6 +851,9 @@
   let currentFileReader = null;
   let _fileCancelled = false;
   let selectedLanguage = 'he';
+  let fileQueue = [];
+  let fileQueueIndex = 0;
+  let initialPrompt = '';
 
   // ── Init ─────────────────────────────────────────────────────────
   window.addEventListener('DOMContentLoaded', () => {
@@ -819,8 +883,16 @@
 
   function _applyLanguageToggle(lang) {
     const txt = document.getElementById('currentLangText');
-    if (txt) {
-      txt.textContent = lang === 'he' ? 'עברית' : 'אנגלית';
+    if (txt) txt.textContent = lang === 'he' ? 'עברית' : 'אנגלית';
+    const prompt = document.getElementById('promptInput');
+    if (prompt) {
+      if (lang === 'en') {
+        prompt.style.direction = 'ltr';
+        prompt.placeholder = 'Initial prompt (optional) — names, terms, context...';
+      } else {
+        prompt.style.direction = 'rtl';
+        prompt.placeholder = 'רמז ראשוני (אופציונלי) — שמות, מונחים, הקשר...';
+      }
     }
   }
 
@@ -858,8 +930,9 @@
     
     glider.className = `segmented-glider glider-${mode}`;
 
-    document.getElementById('viewFile').style.display = (mode === 'file' && !currentFileBlob) ? 'flex' : 'none';
-    document.getElementById('viewFileSelected').style.display = (mode === 'file' && currentFileBlob) ? 'flex' : 'none';
+    document.getElementById('viewFile').style.display = (mode === 'file' && !currentFileBlob && !fileQueue.length) ? 'flex' : 'none';
+    document.getElementById('viewFileSelected').style.display = (mode === 'file' && currentFileBlob && !fileQueue.length) ? 'flex' : 'none';
+    document.getElementById('viewFileBatch').style.display = (mode === 'file' && fileQueue.length > 0) ? 'flex' : 'none';
     document.getElementById('viewLive').style.display = (mode === 'live') ? 'flex' : 'none';
   }
 
@@ -867,23 +940,68 @@
     document.getElementById('fileInput').click();
   }
 
+  function triggerFolderUpload() {
+    document.getElementById('folderInput').click();
+  }
+
   document.getElementById('fileInput').addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (file) handleFileSelection(file);
+    const files = Array.from(e.target.files).filter(f => f.type.startsWith('audio/') || /\.(mp3|wav|m4a|flac|ogg|aac|wma|webm)$/i.test(f.name));
+    if (!files.length) return;
+    if (files.length === 1) handleFileSelection(files[0]);
+    else handleMultiFileSelection(files);
+  });
+
+  document.getElementById('folderInput').addEventListener('change', (e) => {
+    const files = Array.from(e.target.files).filter(f => f.type.startsWith('audio/') || /\.(mp3|wav|m4a|flac|ogg|aac|wma|webm)$/i.test(f.name));
+    if (!files.length) return;
+    if (files.length === 1) handleFileSelection(files[0]);
+    else handleMultiFileSelection(files);
+    e.target.value = "";
   });
 
   function handleFileSelection(file) {
+    fileQueue = [];
     currentFileBlob = file;
     document.getElementById('selectedFileName').textContent = file.name;
     document.getElementById('viewFile').style.display = 'none';
+    document.getElementById('viewFileBatch').style.display = 'none';
     document.getElementById('viewFileSelected').style.display = 'flex';
     lucide.createIcons();
+  }
+
+  function handleMultiFileSelection(files) {
+    currentFileBlob = null;
+    fileQueue = files;
+    fileQueueIndex = 0;
+    document.getElementById('batchCount').textContent = `${files.length} קבצים נבחרו`;
+    const list = document.getElementById('batchList');
+    list.innerHTML = files.map((f, i) => `
+      <div class="batch-row" id="batch-row-${i}">
+        <i data-lucide="file-audio" size="14"></i>
+        <span class="batch-filename">${f.name}</span>
+        <span class="batch-status queued" id="batch-status-${i}">ממתין</span>
+      </div>`).join('');
+    document.getElementById('viewFile').style.display = 'none';
+    document.getElementById('viewFileSelected').style.display = 'none';
+    document.getElementById('viewFileBatch').style.display = 'flex';
+    lucide.createIcons();
+  }
+
+  function setBatchStatus(index, status) {
+    const el = document.getElementById(`batch-status-${index}`);
+    if (!el) return;
+    const labels = { queued: 'ממתין', processing: 'מעבד...', done: '✓ הושלם', error: 'שגיאה' };
+    el.className = `batch-status ${status}`;
+    el.textContent = labels[status] || status;
   }
 
   function resetFileSelection(e) {
     if (e) e.stopPropagation();
     currentFileBlob = null;
+    fileQueue = [];
+    fileQueueIndex = 0;
     document.getElementById('fileInput').value = "";
+    document.getElementById('folderInput').value = "";
     switchCreateMode('file');
   }
 
@@ -921,6 +1039,8 @@
         currentFileReader.cancel();
         currentFileReader = null;
       }
+      fileQueue = [];
+      fileQueueIndex = 0;
       hideWorkspace();
     }
   }
@@ -935,13 +1055,39 @@
     ws.scrollTop = ws.scrollHeight;
   }
 
+  // ── Batch Transcription ──────────────────────────────────────────
+  async function startBatchTranscription() {
+    if (!fileQueue.length) return;
+    fileQueueIndex = 0;
+    currentFileBlob = fileQueue[0];
+    setBatchStatus(0, 'processing');
+    showWorkspace('file', `תמלול: ${currentFileBlob.name} (1/${fileQueue.length})`);
+    await startFileTranscription(true);
+  }
+
+  function _onFileComplete(isBatch) {
+    if (!isBatch) { finalizeSession(); return; }
+    setBatchStatus(fileQueueIndex, 'done');
+    fileQueueIndex++;
+    if (fileQueueIndex < fileQueue.length) {
+      currentFileBlob = fileQueue[fileQueueIndex];
+      setBatchStatus(fileQueueIndex, 'processing');
+      document.getElementById('wsResult').innerHTML = '';
+      document.getElementById('wsModeTitle').textContent = `תמלול: ${currentFileBlob.name} (${fileQueueIndex + 1}/${fileQueue.length})`;
+      startFileTranscription(true);
+    } else {
+      finalizeSession();
+    }
+  }
+
   // ── File Transcription ──────────────────────────────────────────
-  async function startFileTranscription() {
+  async function startFileTranscription(isBatch = false) {
     if (!currentFileBlob) return;
     _fileCancelled = false;
     const file = currentFileBlob;
-    showWorkspace('file', `תמלול: ${file.name}`);
+    if (!isBatch) showWorkspace('file', `תמלול: ${file.name}`);
     const fd = new FormData(); fd.append("file", file); fd.append("language", selectedLanguage);
+    if (initialPrompt) fd.append("initial_prompt", initialPrompt);
     
     try {
       const r = await fetch(`${API}/transcribe/stream`, { method: "POST", body: fd });
@@ -989,10 +1135,24 @@
         audioUrl: URL.createObjectURL(file)
       };
       addToLibrary(item);
-      finalizeSession();
+      _onFileComplete(isBatch);
     } catch (e) {
-      alert("שגיאה בתמלול: " + e.message);
-      hideWorkspace();
+      if (isBatch) {
+        setBatchStatus(fileQueueIndex, 'error');
+        fileQueueIndex++;
+        if (fileQueueIndex < fileQueue.length) {
+          currentFileBlob = fileQueue[fileQueueIndex];
+          setBatchStatus(fileQueueIndex, 'processing');
+          document.getElementById('wsResult').innerHTML = '';
+          document.getElementById('wsModeTitle').textContent = `תמלול: ${currentFileBlob.name} (${fileQueueIndex + 1}/${fileQueue.length})`;
+          startFileTranscription(true);
+        } else {
+          finalizeSession();
+        }
+      } else {
+        alert("שגיאה בתמלול: " + e.message);
+        hideWorkspace();
+      }
     }
   }
 
@@ -1024,7 +1184,9 @@
     analyser = audioCtx.createAnalyser(); analyser.fftSize=256;
     processor = audioCtx.createScriptProcessor(512,1,1);
 
-    liveWs = new WebSocket(`${WS_URL}?language=${selectedLanguage}`);
+    const _wsParams = new URLSearchParams({ language: selectedLanguage });
+    if (initialPrompt) _wsParams.set('initial_prompt', initialPrompt);
+    liveWs = new WebSocket(`${WS_URL}?${_wsParams}`);
     liveWs.onmessage = ({ data }) => {
       const d = JSON.parse(data);
       if (d.status === "ready") {
