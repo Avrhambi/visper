@@ -53,10 +53,12 @@ stt-server          # starts on http://localhost:8000
 Or double-click `start.bat` — it starts the server and opens the browser automatically.
 
 **Features:**
-- Upload audio files (MP3, WAV, M4A, and more) for transcription
+- Upload single or multiple audio files (MP3, WAV, M4A, and more) — or a whole folder
+- Batch queue: sequential processing with per-file status, each result saved to library
 - Live microphone recording with real-time transcription
 - Hebrew and English language selection
-- Transcription library saved locally in the browser
+- Initial prompt field — seed Whisper with names, terms, or context to improve accuracy
+- Transcription library saved locally in the browser; click any timestamp to seek audio
 - Hebrew output is displayed right-to-left; English left-to-right
 
 | Method | Path | Description |
@@ -68,7 +70,7 @@ Or double-click `start.bat` — it starts the server and opens the browser autom
 
 ```bash
 curl -F "file=@audio.mp3" -F "language=he" http://localhost:8000/transcribe
-curl -F "file=@audio.mp3" -F "language=en" http://localhost:8000/transcribe/stream
+curl -F "file=@audio.mp3" -F "language=en" -F "initial_prompt=meeting notes" http://localhost:8000/transcribe/stream
 curl http://localhost:8000/health
 ```
 
@@ -151,6 +153,7 @@ Edit `config.yaml` to adjust behavior. Key options:
 | `output_format` | `txt` | `txt` / `srt` / `json` |
 | `vad_filter` | `true` | Enable Silero VAD |
 | `max_chunk_seconds` | `28` | Max live chunk before forced emit (CLI) |
+| `audio_denoise` | `false` | Noise reduction before Whisper (opt-in, adds ~1s per file) |
 | `confidence_retry_enabled` | `false` | Retry at next accuracy tier if confidence is low |
 
 Full reference with all options is in `config.yaml`.
