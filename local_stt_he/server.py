@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 
 import numpy as np
 
-from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -62,10 +62,11 @@ async def _save_upload(file: UploadFile) -> pathlib.Path:
 async def warmup():
     async def _load():
         try:
-            from local_stt_he.api import _get_engine
-            from local_stt_he.benchmark import get_best_config
-            cfg = get_best_config("medium")
-            await asyncio.to_thread(_get_engine, cfg)
+            from local_stt_he.api import _get_config, _get_engine
+            # Load both configs; if they share the same hardware keys only one model is created
+            for bucket in ("streaming", "medium"):
+                cfg = _get_config(bucket)
+                await asyncio.to_thread(_get_engine, cfg)
         except Exception as e:
             log.warning("Warmup failed: %s", e)
     asyncio.create_task(_load())
@@ -86,7 +87,7 @@ def health():
 
 
 @app.post("/transcribe")
-async def transcribe_endpoint(file: UploadFile = File(...)):
+async def transcribe_endpoint(file: UploadFile = File(...), language: str = Form("he")):
     tmp_path = await _save_upload(file)
     try:
         import soundfile as sf
@@ -111,7 +112,7 @@ async def transcribe_endpoint(file: UploadFile = File(...)):
         segments: list = []
         t0 = time.monotonic()
         text = await asyncio.to_thread(
-            transcribe_chunked, str(tmp_path), segments.append, bucket
+            transcribe_chunked, str(tmp_path), segments.append, bucket, None, language
         )
         elapsed = time.monotonic() - t0
 
@@ -126,7 +127,7 @@ async def transcribe_endpoint(file: UploadFile = File(...)):
 
 
 @app.post("/transcribe/stream")
-async def transcribe_stream(file: UploadFile = File(...)):
+async def transcribe_stream(request: Request, file: UploadFile = File(...), language: str = Form("he")):
     tmp_path = await _save_upload(file)
     q: queue.Queue = queue.Queue()
     _sentinel = object()
@@ -151,12 +152,15 @@ async def transcribe_stream(file: UploadFile = File(...)):
             else:
                 bucket = "extended"
             
+            from local_stt_he.postprocess import normalize_text
+            _norm = lambda t: normalize_text(t, language)
             t0 = time.monotonic()
             transcribe_chunked(
-                str(tmp_path), 
-                lambda seg: q.put(seg), 
+                str(tmp_path),
+                lambda seg: q.put({**seg, "text": _norm(seg["text"])}),
                 bucket,
-                is_aborted=lambda: abort_event.is_set()
+                is_aborted=lambda: abort_event.is_set(),
+                language=language,
             )
             elapsed = time.monotonic() - t0
             if not abort_event.is_set():
@@ -172,18 +176,31 @@ async def transcribe_stream(file: UploadFile = File(...)):
 
     async def _generate():
         loop = asyncio.get_event_loop()
+
+        async def _disconnect_watcher():
+            while not abort_event.is_set():
+                await asyncio.sleep(0.3)
+                if await request.is_disconnected():
+                    print("[server]     Client disconnected, aborting stream...", flush=True)
+                    abort_event.set()
+                    q.put(_sentinel)  # unblock q.get so generator can exit
+                    return
+
+        watcher = asyncio.create_task(_disconnect_watcher())
         try:
             while True:
                 item = await loop.run_in_executor(None, q.get)
                 if item is _sentinel:
                     break
+                if abort_event.is_set():
+                    break
                 yield f"data: {json.dumps(item, ensure_ascii=False)}\n\n"
         except asyncio.CancelledError:
-            print("[server]     Client disconnected from stream, aborting...", flush=True)
             abort_event.set()
             raise
         finally:
-            abort_event.set() # ensure thread stops if generator ends for any reason
+            abort_event.set()
+            watcher.cancel()
             tmp_path.unlink(missing_ok=True)
 
     return StreamingResponse(_generate(), media_type="text/event-stream")
@@ -194,13 +211,14 @@ async def live_ws(websocket: WebSocket):
     await websocket.accept()
     from local_stt_he.api import _get_config, _get_engine
 
+    language = websocket.query_params.get("language", "he")
     cfg    = _get_config("streaming")
     engine = _get_engine(cfg)
 
     _SAMPLE_RATE          = 16000
     _BLOCK_SIZE           = 512
-    _VAD_SILENCE_FRAMES   = int(0.8 * _SAMPLE_RATE / _BLOCK_SIZE)  # 800ms
-    _MAX_FRAMES           = int(28.0 * _SAMPLE_RATE / _BLOCK_SIZE)
+    _VAD_SILENCE_FRAMES   = int(0.5 * _SAMPLE_RATE / _BLOCK_SIZE)  # 500ms
+    _MAX_FRAMES           = int(8.0 * _SAMPLE_RATE / _BLOCK_SIZE)
 
     cal_blocks: list  = []
     rms_threshold     = None
@@ -209,7 +227,7 @@ async def live_ws(websocket: WebSocket):
     audio_offset      = 0  # cumulative samples emitted so far
 
     def _transcribe(chunk: np.ndarray) -> tuple:
-        result = engine.transcribe(chunk, bucket="streaming")
+        result = engine.transcribe(chunk, bucket="streaming", language=language)
         return result.text.strip(), result.segments or []
 
     async def _emit(chunk: np.ndarray) -> None:
@@ -277,6 +295,13 @@ async def live_ws(websocket: WebSocket):
 
 def main() -> None:
     import uvicorn
+
+    class _NoHealthLog(logging.Filter):
+        def filter(self, record: logging.LogRecord) -> bool:
+            return "GET /health" not in record.getMessage()
+
+    logging.getLogger("uvicorn.access").addFilter(_NoHealthLog())
+
     uvicorn.run("local_stt_he.server:app", host="0.0.0.0", port=8000, reload=False)
 
 

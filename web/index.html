@@ -14,6 +14,8 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    html { height: 100%; }
+
     :root {
       --bg: #F9FAFB;
       --surface: #FFFFFF;
@@ -39,7 +41,8 @@
       font-family: 'Assistant', 'Inter', -apple-system, sans-serif;
       background: var(--bg);
       color: var(--text);
-      min-height: 100vh;
+      height: 100%;
+      overflow: hidden;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -50,7 +53,11 @@
     .shell {
       width: 100%;
       max-width: 800px;
-      padding: 2rem 1.5rem 6rem;
+      padding: 0 1.5rem;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
     }
 
     /* ── Header ── */
@@ -59,12 +66,13 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 1rem 0 3.5rem;
+      padding: 0.75rem 0 1rem;
+      flex-shrink: 0;
       transition: var(--transition);
-      gap: 0.75rem;
+      gap: 0.5rem;
     }
     header h1 {
-      font-size: 2.5rem;
+      font-size: 2rem;
       font-weight: 800;
       letter-spacing: -0.04em;
       display: flex;
@@ -96,7 +104,8 @@
     .nav-container {
       display: flex;
       justify-content: center;
-      margin-bottom: 3rem;
+      margin-bottom: 1.25rem;
+      flex-shrink: 0;
     }
     .nav-tabs {
       background: #F3F4F6;
@@ -129,7 +138,15 @@
     .nav-tab i { width: 18px; height: 18px; stroke-width: 2; }
 
     .tab-panel { display: none; width: 100%; }
-    .tab-panel.active { display: block; animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+    .tab-panel.active {
+      display: block;
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding-bottom: 4.5rem;
+      animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    #tab-create.active { overflow: hidden; }
 
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(8px); }
@@ -191,6 +208,7 @@
       align-items: center;
       justify-content: center;
       transition: var(--transition);
+      position: relative;
     }
 
     .dropzone {
@@ -329,7 +347,9 @@
     
     .streaming-textarea {
       width: 100%;
-      min-height: 320px;
+      min-height: 120px;
+      max-height: 38vh;
+      overflow-y: auto;
       border: none;
       background: transparent;
       font-size: 1.125rem;
@@ -360,13 +380,24 @@
 
     .pulse-dot {
       width: 8px; height: 8px; background: var(--accent);
-      border-radius: 50%; animation: pulse-blue 2s infinite;
+      border-radius: 50%; animation: pulse-dot-anim 2s infinite;
+      transition: background 0.3s;
     }
-    @keyframes pulse-blue {
+    @keyframes pulse-dot-anim {
       0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 0, 0, 0.2); }
       70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(0, 0, 0, 0); }
       100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 0, 0, 0); }
     }
+    .pulse-dot.recording {
+      background: var(--danger);
+      animation: pulse-dot-red 2s infinite;
+    }
+    @keyframes pulse-dot-red {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+      70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+    .pulse-dot.paused { animation: none; background: var(--text-muted); }
 
     /* ── Controls ── */
     .controls {
@@ -448,7 +479,8 @@
       color: var(--text);
       direction: rtl;
       resize: vertical;
-      min-height: 120px;
+      min-height: 80px;
+      max-height: 220px;
       outline: none;
       transition: var(--transition);
     }
@@ -469,7 +501,9 @@
       background: #F9FAFB;
       border-radius: var(--radius-lg);
       border: 1px solid transparent;
-      min-height: 120px;
+      min-height: 80px;
+      max-height: 220px;
+      overflow-y: auto;
     }
 
     .lib-item.editing .lib-text-display { display: none; }
@@ -557,6 +591,36 @@
     .seg-span:hover { background: rgba(37, 99, 235, 0.08); }
     .seg-active { background: rgba(37, 99, 235, 0.13); }
 
+    /* ── Language Select ── */
+    .lang-select-wrap {
+      position: absolute;
+      top: 1.25rem;
+      right: 1.25rem;
+      z-index: 210;
+    }
+    .lang-select {
+      background: #F3F4F6;
+      border: 1px solid var(--border-light);
+      border-radius: 999px;
+      padding: 5px 16px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      cursor: pointer;
+      outline: none;
+      font-family: 'Assistant', sans-serif;
+      transition: var(--transition);
+      direction: rtl;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .lang-select:hover { border-color: var(--border); color: var(--text); }
+    .lang-menu {
+      top: calc(100% + 8px);
+      bottom: auto !important;
+    }
+
     /* ── Download Dropdown ── */
     .dl-wrapper { position: relative; display: inline-flex; flex-direction: column; align-items: center; }
     .dl-menu {
@@ -623,6 +687,21 @@
     </div>
 
     <div id="createCard" class="create-card">
+      <!-- Language selector -->
+      <div class="lang-select-wrap">
+        <div class="dl-wrapper">
+          <button id="langSelectBtn" class="lang-select" onclick="toggleLangMenu(event)">
+            <span style="opacity: 0.8; font-weight: 600;">שפה:</span>
+            <span id="currentLangText">עברית</span>
+            <i data-lucide="chevron-down" size="14" style="opacity: 0.5;"></i>
+          </button>
+          <div id="langMenu" class="dl-menu lang-menu">
+            <button class="dl-option" onclick="setLanguage('he')">עברית</button>
+            <button class="dl-option" onclick="setLanguage('en')">אנגלית</button>
+          </div>
+        </div>
+      </div>
+
       <!-- File Mode -->
       <div id="viewFile" class="dropzone" onclick="triggerFileUpload()">
         <div class="dropzone-icon">
@@ -654,7 +733,7 @@
         </div>
         <div class="dropzone-text">
           <h3>הקלטה חיה</h3>
-          <p>לחץ על המיקרופון כדי להתחיל</p>
+          <p id="liveMicHint">לחץ על המיקרופון כדי להתחיל</p>
         </div>
       </div>
     </div>
@@ -663,7 +742,7 @@
     <div id="workspace" class="workspace">
       <div class="workspace-header">
         <div class="workspace-title">
-          <div class="pulse-dot"></div>
+          <div id="pulseDot" class="pulse-dot"></div>
           <span id="wsModeTitle">מתמלל...</span>
         </div>
         <div id="wsStatusText" style="font-size: 0.8125rem; color: var(--text-muted); font-weight: 500;"></div>
@@ -708,18 +787,42 @@
   let isPaused = false;
   let activeMode = null; // 'file' or 'live'
   let currentFileBlob = null;
-  let currentFileReader = null; // To support cancellation
+  let currentFileReader = null;
+  let _fileCancelled = false;
+  let selectedLanguage = 'he';
 
   // ── Init ─────────────────────────────────────────────────────────
   window.addEventListener('DOMContentLoaded', () => {
     loadHistory();
     checkHealth();
-    setInterval(checkHealth, 30000);
+    setInterval(checkHealth, 120000);
     lucide.createIcons();
     document.addEventListener('click', () => {
       document.querySelectorAll('.dl-menu.open').forEach(m => m.classList.remove('open'));
     });
+    // Apply persisted language selection
+    _applyLanguageToggle(selectedLanguage);
   });
+
+  function toggleLangMenu(e) {
+    e.stopPropagation();
+    const menu = document.getElementById('langMenu');
+    document.querySelectorAll('.dl-menu.open').forEach(m => { if (m !== menu) m.classList.remove('open'); });
+    menu.classList.toggle('open');
+  }
+
+  function setLanguage(lang) {
+    selectedLanguage = lang;
+    _applyLanguageToggle(lang);
+    document.getElementById('langMenu').classList.remove('open');
+  }
+
+  function _applyLanguageToggle(lang) {
+    const txt = document.getElementById('currentLangText');
+    if (txt) {
+      txt.textContent = lang === 'he' ? 'עברית' : 'אנגלית';
+    }
+  }
 
   async function checkHealth() {
     try {
@@ -791,7 +894,10 @@
     document.querySelector('.toggle-container').style.display = 'none';
     
     document.getElementById('wsModeTitle').textContent = title;
-    document.getElementById('wsResult').innerHTML = "";
+    const wsResult = document.getElementById('wsResult');
+    wsResult.innerHTML = "";
+    wsResult.style.direction = selectedLanguage === 'en' ? 'ltr' : 'rtl';
+    wsResult.style.textAlign = selectedLanguage === 'en' ? 'left' : 'right';
     document.getElementById('wsStatusText').textContent = "";
     document.getElementById('btnStop').disabled = false;
     document.getElementById('btnStop').style.opacity = "1";
@@ -811,6 +917,7 @@
     if (activeMode === 'live') stopLive();
     if (activeMode === 'file') {
       if (currentFileReader) {
+        _fileCancelled = true;
         currentFileReader.cancel();
         currentFileReader = null;
       }
@@ -831,9 +938,10 @@
   // ── File Transcription ──────────────────────────────────────────
   async function startFileTranscription() {
     if (!currentFileBlob) return;
+    _fileCancelled = false;
     const file = currentFileBlob;
     showWorkspace('file', `תמלול: ${file.name}`);
-    const fd = new FormData(); fd.append("file", file);
+    const fd = new FormData(); fd.append("file", file); fd.append("language", selectedLanguage);
     
     try {
       const r = await fetch(`${API}/transcribe/stream`, { method: "POST", body: fd });
@@ -865,7 +973,7 @@
       }
 
       currentFileReader = null;
-      if (!fullText.trim()) {
+      if (_fileCancelled || !fullText.trim()) {
         hideWorkspace();
         return;
       }
@@ -877,6 +985,7 @@
         text: fullText || "(לא זוהה דיבור)",
         segments: segments.length > 0 ? segments : null,
         type: 'file',
+        language: selectedLanguage,
         audioUrl: URL.createObjectURL(file)
       };
       addToLibrary(item);
@@ -891,16 +1000,23 @@
   let audioCtx, processor, analyser, micStream, liveWs, liveRecorder, liveMime, allChunks, liveText, liveSegments;
   let meterRaf;
 
+  function _resetMicButton() {
+    const btn = document.getElementById('micButton');
+    btn.classList.remove('active');
+    btn.style.pointerEvents = '';
+    document.getElementById('liveMicHint').textContent = "לחץ על המיקרופון כדי להתחיל";
+  }
+
   async function startLive() {
     try { micStream = await navigator.mediaDevices.getUserMedia({ audio:true }); }
     catch(e) { alert("גישה למיקרופון נדחתה"); return; }
 
-    showWorkspace('live', "הקלטה חיה");
-    document.getElementById('wsStatusText').textContent = "כיול...";
-    document.getElementById('btnStop').disabled = true;
-    document.getElementById('btnStop').style.opacity = "0.5";
-    
-    document.getElementById('micButton').classList.add('active');
+    // Show calibrating state on mic button — don't transition to workspace yet
+    const micBtn = document.getElementById('micButton');
+    micBtn.classList.add('active');
+    micBtn.style.pointerEvents = 'none';
+    document.getElementById('liveMicHint').textContent = "מכייל...";
+
     liveText = ""; allChunks = []; liveSegments = []; isPaused = false;
 
     audioCtx = new AudioContext({ sampleRate:16000 });
@@ -908,12 +1024,15 @@
     analyser = audioCtx.createAnalyser(); analyser.fftSize=256;
     processor = audioCtx.createScriptProcessor(512,1,1);
 
-    liveWs = new WebSocket(WS_URL);
+    liveWs = new WebSocket(`${WS_URL}?language=${selectedLanguage}`);
     liveWs.onmessage = ({ data }) => {
       const d = JSON.parse(data);
       if (d.status === "ready") {
         isRecording = true;
-        document.getElementById('wsStatusText').textContent = "";
+        // Calibration done — now transition to workspace
+        _resetMicButton();
+        showWorkspace('live', "הקלטה חיה");
+        document.getElementById('pulseDot').classList.add('recording');
         document.getElementById('btnStop').disabled = false;
         document.getElementById('btnStop').style.opacity = "1";
         animateMeter();
@@ -942,20 +1061,25 @@
   function togglePauseLive() {
     isPaused = !isPaused;
     const btn = document.getElementById('btnPause');
+    const dot = document.getElementById('pulseDot');
     if (isPaused) {
       liveRecorder.pause();
       btn.innerHTML = '<i data-lucide="play"></i>';
       document.getElementById('wsStatusText').textContent = "מושהה";
+      dot.classList.remove('recording'); dot.classList.add('paused');
     } else {
       liveRecorder.resume();
       btn.innerHTML = '<i data-lucide="pause"></i>';
       document.getElementById('wsStatusText').textContent = "";
+      dot.classList.remove('paused'); dot.classList.add('recording');
     }
     lucide.createIcons();
   }
 
   function stopLive() {
     isRecording = false;
+    const dot = document.getElementById('pulseDot');
+    dot.classList.remove('recording', 'paused');
     document.getElementById('micButton').classList.remove('active');
     if (meterRaf) cancelAnimationFrame(meterRaf);
     if (liveRecorder?.state !== "inactive") liveRecorder.stop();
@@ -965,6 +1089,7 @@
   }
 
   async function onSessionEnd() {
+    _resetMicButton(); // safe to call even if already reset
     if (!liveText.trim()) {
       hideWorkspace();
       return;
@@ -977,6 +1102,7 @@
       text: liveText,
       segments: liveSegments.length > 0 ? liveSegments : null,
       type: 'live',
+      language: selectedLanguage,
       audioUrl: blob ? URL.createObjectURL(blob) : null
     };
     addToLibrary(item);
@@ -1011,16 +1137,28 @@
 
   function saveHistory() {
     const serializable = historyData.map(d => ({ ...d, audioUrl: null }));
-    localStorage.setItem("stt_history_v4", JSON.stringify(serializable));
+    localStorage.setItem("stt_history_v5", JSON.stringify(serializable));
   }
 
   function loadHistory() {
-    let saved = localStorage.getItem("stt_history_v4");
+    let saved = localStorage.getItem("stt_history_v5");
     if (!saved) {
-      const old = localStorage.getItem("stt_history_v3");
-      if (old) {
+      // Migrate from v4
+      const v4 = localStorage.getItem("stt_history_v4");
+      if (v4) {
         try {
-          historyData = JSON.parse(old).map(i => ({ ...i, segments: i.segments || null }));
+          historyData = JSON.parse(v4).map(i => ({ ...i, language: i.language || "he" }));
+          saveHistory();
+          localStorage.removeItem("stt_history_v4");
+          renderLibrary();
+        } catch(e) {}
+        return;
+      }
+      // Migrate from v3
+      const v3 = localStorage.getItem("stt_history_v3");
+      if (v3) {
+        try {
+          historyData = JSON.parse(v3).map(i => ({ ...i, segments: i.segments || null, language: "he" }));
           saveHistory();
           localStorage.removeItem("stt_history_v3");
           renderLibrary();
@@ -1098,6 +1236,14 @@
     // Set text safely
     renderDisplayText(item, div.querySelector(`#display-${item.id}`));
     div.querySelector(`#edit-${item.id}`).value = item.text;
+
+    // Apply LTR direction for English items
+    if (item.language === 'en') {
+      div.querySelector(`#display-${item.id}`).style.direction = 'ltr';
+      div.querySelector(`#display-${item.id}`).style.textAlign = 'left';
+      div.querySelector(`#edit-${item.id}`).style.direction = 'ltr';
+      div.querySelector(`#edit-${item.id}`).style.textAlign = 'left';
+    }
 
     // Click-to-seek: attach timeupdate listener if segments + audio are present
     if (item.segments?.length && item.audioUrl) {

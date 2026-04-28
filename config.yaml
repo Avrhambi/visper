@@ -91,9 +91,9 @@ benchmark_mode: "smart"
 
 # ── Compute override ──────────────────────────────────────────────────────────
 # Leave blank to use auto-detected best config from benchmark_results.json.
-force_device: "cuda"          # "" | "cpu" | "cuda" | "openvino"
-force_compute_type: "int8_float32"  # "" | "int8" | "float16" | "int8_float16" | etc.
-force_cpu_threads: 2          # 0 = use benchmark result
+force_device: ""              # "" | "cpu" | "cuda" | "openvino"
+force_compute_type: ""        # "" | "int8" | "float16" | "int8_float16" | etc.
+force_cpu_threads: 0          # 0 = use benchmark result
 
 # Set skip_benchmark: true together with force_device + force_compute_type to
 # bypass the benchmark entirely — no benchmark_results.json needed.

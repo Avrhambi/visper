@@ -51,6 +51,8 @@ def main():
                         choices=["auto", "fast", "balanced", "accurate"],
                         default=None,
                         help="Override accuracy_mode from config.yaml")
+    parser.add_argument("--language", choices=["he", "en"], default="he",
+                        help="Language to transcribe (default: he)")
     args = parser.parse_args()
 
     if args.background:
@@ -75,6 +77,7 @@ def main():
     from local_stt_he.streamer import LiveStreamer
 
     config = get_best_config("streaming")
+    config["language"] = args.language
     source = Path(args.file) if args.file else None
 
     if source:

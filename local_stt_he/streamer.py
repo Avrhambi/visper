@@ -65,6 +65,7 @@ class LiveStreamer:
 
         self._running = False
         self._prev_text: str = ""  # last chunk's raw transcription for overlap dedup
+        self._language: str = config.get("language", "he") if config else "he"
 
         # Graceful degradation under queue pressure
         self._pressure_mode: bool = False
@@ -397,11 +398,12 @@ class LiveStreamer:
                 if self._pressure_mode:
                     from local_stt_he.params import get_params_for_tier
                     fast_params = get_params_for_tier("fast", "streaming", self._transcriber._config)
-                    # Temporarily patch the transcriber call with fast params via a wrapper
                     result = self._transcriber.transcribe(chunk, bucket="streaming",
-                                                          _tier_override=fast_params)
+                                                          _tier_override=fast_params,
+                                                          language=self._language)
                 else:
-                    result = self._transcriber.transcribe(chunk, bucket="streaming")
+                    result = self._transcriber.transcribe(chunk, bucket="streaming",
+                                                          language=self._language)
 
                 self._segments_transcribed += 1
                 self._total_audio_duration += result.audio_duration

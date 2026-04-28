@@ -1,17 +1,35 @@
-# Hebrew STT Engine
+# וִויסְפֶּר — Local Speech-to-Text
 
-Offline Hebrew speech-to-text on your own hardware. No cloud, no GUI. Self-benchmarks and configures itself on first run.
+Offline Hebrew (and English) speech-to-text on your own hardware. No cloud, no subscriptions, no data leaves your machine. Self-benchmarks and configures itself on first run.
 
 Model: [`ivrit-ai/whisper-large-v3-turbo-ct2`](https://huggingface.co/ivrit-ai/whisper-large-v3-turbo-ct2)
 
 ---
 
-## Quick Start
+## Getting Started
+
+### Non-developers (Windows)
+
+**One prerequisite:** [Python 3.10+](https://www.python.org/downloads/) — check **"Add Python to PATH"** during installation.
+
+Then:
+
+1. Download this repo ([ZIP](https://github.com/Avrhambi/local-whisper-he/archive/refs/heads/master.zip)) and extract it
+2. Double-click **`start.bat`**
+
+That's it. On first run it installs all dependencies, downloads the model (~1.5 GB, one time), runs the hardware benchmark, and opens the web UI at `http://localhost:8000` in your browser. Every run after that starts in a few seconds.
+
+To get the latest version: double-click **`update.bat`**.
+
+> If anything goes wrong during setup, the error screen will copy a help message to your clipboard automatically — paste it into an ai chatbot like: ChatGPT or Claude for step-by-step guidance.
+
+### Developers
 
 ```bash
 git clone https://github.com/Avrhambi/local-stt-he && cd local-stt-he
 python install.py           # installs deps, downloads model (~1.5 GB once), runs benchmark
-stt-file audio.mp3          # or: python transcribe_file.py audio.mp3
+stt-server                  # web UI at http://localhost:8000
+stt-file audio.mp3          # or use the CLI directly
 ```
 
 Requires Python 3.10+ and [ffmpeg](https://ffmpeg.org) on PATH (WAV files work without it).
@@ -22,7 +40,37 @@ Requires Python 3.10+ and [ffmpeg](https://ffmpeg.org) on PATH (WAV files work w
 
 ## What It Does
 
-Transcribes Hebrew audio files and microphone input using [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (CTranslate2). Auto-detects your hardware (CPU / CUDA / Intel iGPU via OpenVINO) and benchmarks it once to pick the best inference backend and accuracy tier. No manual configuration needed — results are cached in `benchmark_results.json`.
+Transcribes **Hebrew and English** audio files and microphone input using [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (CTranslate2). Auto-detects your hardware (CPU / CUDA / Intel iGPU via OpenVINO) and benchmarks it once to pick the best inference backend and accuracy tier. No manual configuration needed — results are cached in `benchmark_results.json`.
+
+---
+
+## Web UI
+
+```bash
+stt-server          # starts on http://localhost:8000
+```
+
+Or double-click `start.bat` — it starts the server and opens the browser automatically.
+
+**Features:**
+- Upload audio files (MP3, WAV, M4A, and more) for transcription
+- Live microphone recording with real-time transcription
+- Hebrew and English language selection
+- Transcription library saved locally in the browser
+- Hebrew output is displayed right-to-left; English left-to-right
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Device info and status |
+| POST | `/transcribe` | Upload a file, get `{text, segments, rtf}` |
+| POST | `/transcribe/stream` | Upload a file, get SSE stream of segment events |
+| WS | `/ws/live` | WebSocket live microphone transcription |
+
+```bash
+curl -F "file=@audio.mp3" -F "language=he" http://localhost:8000/transcribe
+curl -F "file=@audio.mp3" -F "language=en" http://localhost:8000/transcribe/stream
+curl http://localhost:8000/health
+```
 
 ---
 
@@ -31,22 +79,24 @@ Transcribes Hebrew audio files and microphone input using [faster-whisper](https
 ### Offline file transcription
 
 ```bash
-stt-file audio.mp3                     # transcribe → write audio.txt
-stt-file audio.wav --output srt        # SRT subtitles
-stt-file audio.mp3 --output json       # JSON with segments, RTF, confidence scores
-stt-file audio.mp3 --no-file --clip    # print + copy to clipboard, no file written
-stt-file audio.mp3 --progress          # print each segment as it is decoded
-stt-file *.wav                         # batch mode
+stt-file audio.mp3                          # transcribe → write audio.txt
+stt-file audio.wav --output srt             # SRT subtitles
+stt-file audio.mp3 --output json            # JSON with segments, RTF, confidence scores
+stt-file audio.mp3 --no-file --clip         # print + copy to clipboard, no file written
+stt-file audio.mp3 --progress              # print each segment as it is decoded
+stt-file audio.mp3 --language en           # transcribe English
+stt-file *.wav                              # batch mode
 ```
 
 ### Live / microphone
 
 ```bash
-stt-live                               # microphone transcription
-stt-live --file audio.mp3             # file streaming mode
-stt-live --output result.txt          # save accumulated transcript
-stt-live --clip                       # copy to clipboard on Ctrl+C
-stt-live --progress                   # print each segment with timestamp as it arrives
+stt-live                                    # microphone transcription
+stt-live --file audio.mp3                  # file streaming mode
+stt-live --output result.txt               # save accumulated transcript
+stt-live --clip                            # copy to clipboard on Ctrl+C
+stt-live --progress                        # print each segment with timestamp as it arrives
+stt-live --language en                     # transcribe English
 ```
 
 If the CLI entry points aren't on PATH yet (before `pip install -e .`):
@@ -59,8 +109,6 @@ python transcribe_live.py
 ---
 
 ## Python API
-
-Install as an editable package for use from other projects:
 
 ```bash
 pip install -e .
@@ -92,29 +140,6 @@ stream_transcribe(on_transcript, "audio.mp3")  # file
 
 ---
 
-## FastAPI Server
-
-```bash
-pip install -e ".[server]"
-stt-server                    # starts on http://localhost:8000
-```
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/health` | Device info and status |
-| POST | `/transcribe` | Upload a file, get `{text, segments, rtf}` |
-| POST | `/transcribe/stream` | Upload a file, get SSE stream of `{text, is_final}` events |
-
-```bash
-curl -F "file=@audio.mp3" http://localhost:8000/transcribe
-curl -F "file=@audio.mp3" http://localhost:8000/transcribe/stream
-curl http://localhost:8000/health
-```
-
-Every non-Python integration — Node, Go, mobile backends — speaks HTTP.
-
----
-
 ## Configuration
 
 Edit `config.yaml` to adjust behavior. Key options:
@@ -125,7 +150,7 @@ Edit `config.yaml` to adjust behavior. Key options:
 | `resource_profile` | `foreground` | `foreground` / `background` / `minimal` |
 | `output_format` | `txt` | `txt` / `srt` / `json` |
 | `vad_filter` | `true` | Enable Silero VAD |
-| `max_chunk_seconds` | `28` | Max live chunk before forced emit |
+| `max_chunk_seconds` | `28` | Max live chunk before forced emit (CLI) |
 | `confidence_retry_enabled` | `false` | Retry at next accuracy tier if confidence is low |
 
 Full reference with all options is in `config.yaml`.
@@ -181,23 +206,26 @@ RTF budget = 0.85 (1.0 = real-time). WER = 0.179, CER = 0.084 on 221 Hebrew file
 ## Project Structure
 
 ```
-local_stt_he/benchmark.py   ← hardware detection, candidate selection, fallback chain
-local_stt_he/resource.py    ← resource profile enforcement (threads, GPU, VRAM guard, priority)
-local_stt_he/params.py      ← Whisper parameter selection per bucket/tier
-local_stt_he/transcriber.py ← dispatches to faster-whisper or openvino_genai; walks fallback chain
-local_stt_he/api.py         ← public API: transcribe(), stream_transcribe(), transcribe_chunked()
-local_stt_he/streamer.py    ← VAD-gated live transcription with sliding window overlap
-local_stt_he/postprocess.py ← Hebrew text normalization
-local_stt_he/constants.py   ← audio constants (SAMPLE_RATE, CHANNELS, BLOCK_SIZE, DTYPE)
-transcribe_file.py           ← CLI offline transcription
-transcribe_live.py           ← CLI live/streaming transcription
-server.py                    ← FastAPI server (pip install -e ".[server]")
-run_benchmark.py             ← benchmark entry point
+start.bat                    ← Windows launcher: setup + server + browser (double-click)
+update.bat                   ← Windows updater: git pull + pip install (double-click)
 install.py                   ← first-run setup: installs deps, downloads model, runs benchmark
-config.yaml                  ← user-tunable parameters (committed)
-benchmark_results.json       ← auto-generated, never hand-edited (gitignored)
-records/                     ← Hebrew audio files used as benchmark inputs
-tests/                       ← standalone hardware validation scripts
+web/index.html               ← web UI (served by stt-server)
+local_stt_he/benchmark.py    ← hardware detection, candidate selection, fallback chain
+local_stt_he/resource.py     ← resource profile enforcement (threads, GPU, VRAM guard, priority)
+local_stt_he/params.py       ← Whisper parameter selection per bucket/tier
+local_stt_he/transcriber.py  ← dispatches to faster-whisper or openvino_genai; walks fallback chain
+local_stt_he/api.py          ← public API: transcribe(), stream_transcribe(), transcribe_chunked()
+local_stt_he/streamer.py     ← VAD-gated live transcription with sliding window overlap
+local_stt_he/postprocess.py  ← text normalization (Hebrew + language-neutral)
+local_stt_he/constants.py    ← audio constants (SAMPLE_RATE, CHANNELS, BLOCK_SIZE, DTYPE)
+local_stt_he/server.py       ← FastAPI server
+transcribe_file.py            ← CLI offline transcription
+transcribe_live.py            ← CLI live/streaming transcription
+run_benchmark.py              ← benchmark entry point
+config.yaml                   ← user-tunable parameters (committed)
+benchmark_results.json        ← auto-generated, never hand-edited (gitignored)
+records/                      ← Hebrew audio files used as benchmark inputs
+tests/                        ← standalone hardware validation scripts
 ```
 
 ---
@@ -212,6 +240,15 @@ python tests/test_gpu.py          # CUDA compute types
 python tests/test_openvino.py     # Intel Iris Xe via OpenVINO
 python tests/test_local_config.py # full local config sweep
 ```
+
+---
+
+## Roadmap
+
+- [ ] **Speaker diarization** — label segments by speaker (Speaker 1, Speaker 2) using pyannote.audio
+- [ ] **Live diarization** — post-session speaker labeling for recorded sessions
+- [ ] **Additional languages** — expand beyond Hebrew/English (Arabic, Russian, etc.)
+- [ ] **Second English model** — dedicated `faster-whisper-large-v3` for higher English accuracy
 
 ---
 

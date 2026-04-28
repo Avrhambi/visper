@@ -39,30 +39,7 @@ import time
 
 ROOT = Path(__file__).parent
 
-
-def _resolve_bucket(path: Path, bucket: str) -> str:
-    if bucket != "auto":
-        return bucket
-    try:
-        import soundfile as sf
-        dur = sf.info(str(path)).duration
-    except Exception:
-        try:
-            from mutagen import File as MutagenFile
-            f = MutagenFile(str(path))
-            dur = float(f.info.length) if f and f.info else None
-        except Exception:
-            dur = None
-
-    if dur is None:
-        return "medium"
-    if dur < 10:
-        return "short"
-    if dur < 30:
-        return "medium"
-    if dur < 60:
-        return "long"
-    return "extended"
+from local_stt_he.api import _resolve_bucket
 
 
 def _rtf_speed_label(rtf: float) -> str:
@@ -166,9 +143,10 @@ def transcribe_one(path: Path, engine, args, cfg: dict) -> tuple[str, float]:
     if getattr(args, "progress", False):
         def _progress_cb(seg: dict) -> None:
             print(f"  [{seg['start']:.1f}s] {seg['text'].strip()}", file=sys.stderr)
-        result = engine.transcribe(source=path, bucket=bucket, on_segment=_progress_cb)
+        result = engine.transcribe(source=path, bucket=bucket, on_segment=_progress_cb,
+                                   language=args.language)
     else:
-        result = engine.transcribe(source=path, bucket=bucket)
+        result = engine.transcribe(source=path, bucket=bucket, language=args.language)
 
     if fmt == "srt":
         text_out = _format_srt(result)
@@ -226,6 +204,8 @@ def main():
                         choices=["foreground", "background", "minimal"],
                         default=None,
                         help="Override resource_profile from config.yaml")
+    parser.add_argument("--language", choices=["he", "en"], default="he",
+                        help="Language to transcribe (default: he)")
     args = parser.parse_args()
 
     if args.background:

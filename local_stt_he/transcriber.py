@@ -60,14 +60,20 @@ class Transcriber:
         config = check_vram_before_load(config)
         self._config = config
 
-        # Load per-session config flags
+        # Load per-session config flags (read once at construction time)
         self._language = "he"
+        self._vad_filter = True
+        self._vad_min_silence_ms = 300
+        self._vad_speech_pad_ms = 200
         try:
             import yaml as _yaml
             _cfg_path = ROOT / "config.yaml"
             if _cfg_path.exists():
                 _ucfg = _yaml.safe_load(_cfg_path.read_text()) or {}
                 self._language = _ucfg.get("language", "he")
+                self._vad_filter = _ucfg.get("vad_filter", True)
+                self._vad_min_silence_ms = _ucfg.get("vad_min_silence_ms", 300)
+                self._vad_speech_pad_ms = _ucfg.get("vad_speech_pad_ms", 200)
         except Exception:
             pass
         self._backend_type = config["device"]
@@ -241,6 +247,7 @@ class Transcriber:
         on_segment: Optional[Callable[[dict], None]] = None,
         _tier_override=None,
         is_aborted: Optional[Callable[[], bool]] = None,
+        language: str = None,
     ) -> TranscriptResult:
         """
         source: file path or float32 numpy array at 16 kHz.
@@ -250,28 +257,19 @@ class Transcriber:
         is_aborted: optional callable returning bool. Checked between segments.
         """
         from local_stt_he.params import get_params
-        import yaml
 
+        _lang = language if language is not None else self._language
         params = _tier_override if _tier_override is not None else get_params(bucket, self._config)
 
-        # Load VAD settings from config.yaml
-        vad_filter = True
-        vad_min_silence_ms = 300
-        vad_speech_pad_ms = 200
-        try:
-            cfg_path = ROOT / "config.yaml"
-            if cfg_path.exists():
-                user_cfg = yaml.safe_load(cfg_path.read_text()) or {}
-                vad_filter = user_cfg.get("vad_filter", True)
-                vad_min_silence_ms = user_cfg.get("vad_min_silence_ms", 300)
-                vad_speech_pad_ms = user_cfg.get("vad_speech_pad_ms", 200)
-        except Exception:
-            pass
+        vad_filter = self._vad_filter
+        vad_min_silence_ms = self._vad_min_silence_ms
+        vad_speech_pad_ms = self._vad_speech_pad_ms
 
         if self._worker_proc is not None:
             return self._transcribe_via_worker(source, bucket, params,
                                                vad_filter, vad_min_silence_ms,
-                                               vad_speech_pad_ms, is_aborted=is_aborted)
+                                               vad_speech_pad_ms, is_aborted=is_aborted,
+                                               language=_lang)
 
         t0 = time.time()
 
@@ -280,7 +278,7 @@ class Transcriber:
             audio_duration = len(audio) / 16000.0 if isinstance(audio, np.ndarray) else self._get_duration(source)
 
             kwargs = params.as_transcribe_kwargs()
-            kwargs["language"] = "he"
+            kwargs["language"] = _lang
             kwargs["vad_filter"] = vad_filter
             kwargs["vad_parameters"] = dict(
                 min_silence_duration_ms=vad_min_silence_ms,
@@ -318,7 +316,7 @@ class Transcriber:
                     print(f"[STT] Low confidence — retrying at '{upgrade}' tier", file=sys.stderr)
                     params = get_params_for_tier(upgrade, bucket, self._config)
                     kwargs2 = params.as_transcribe_kwargs()
-                    kwargs2["language"] = "he"
+                    kwargs2["language"] = _lang
                     kwargs2["vad_filter"] = vad_filter
                     kwargs2["vad_parameters"] = dict(
                         min_silence_duration_ms=vad_min_silence_ms,
@@ -331,10 +329,8 @@ class Transcriber:
                                 for s in seg_list]
                     text = "".join(s.text for s in seg_list).strip()
 
-            # Hebrew normalization
-            if self._language == "he":
-                from local_stt_he.postprocess import normalize_hebrew
-                text = normalize_hebrew(text)
+            from local_stt_he.postprocess import normalize_text
+            text = normalize_text(text, _lang)
 
         elif self._backend_type == "openvino":
             import openvino_genai as ov_genai
@@ -342,16 +338,15 @@ class Transcriber:
             audio_duration = len(audio) / 16000.0
 
             gen_config = ov_genai.WhisperGenerateConfig()
-            gen_config.language = "<|he|>"
+            gen_config.language = f"<|{_lang}|>"
             gen_config.return_timestamps = not params.without_timestamps
             _ov_set(gen_config, "beam_size", params.beam_size)
             _ov_set(gen_config, "temperature", params.temperature)
             _ov_set(gen_config, "repetition_penalty", params.patience)
             result = self._backend.generate(audio, gen_config)
             text = result.texts[0].strip() if result.texts else ""
-            if self._language == "he":
-                from local_stt_he.postprocess import normalize_hebrew
-                text = normalize_hebrew(text)
+            from local_stt_he.postprocess import normalize_text
+            text = normalize_text(text, _lang)
             segments = []
             if not params.without_timestamps and hasattr(result, "chunks") and result.chunks:
                 segments = [
@@ -380,6 +375,7 @@ class Transcriber:
         self, source, bucket: str, params, vad_filter: bool,
         vad_min_silence_ms: int, vad_speech_pad_ms: int,
         is_aborted: Optional[Callable[[], bool]] = None,
+        language: str = None,
     ) -> TranscriptResult:
         """Send a transcription request to the venv worker subprocess."""
         t0 = time.time()
@@ -396,9 +392,10 @@ class Transcriber:
             audio_path = str(source)
             fallback_duration = self._get_duration(source)
 
+        _lang = language if language is not None else self._language
         kwargs = params.as_transcribe_kwargs()
-        kwargs["language"] = "he"
-        kwargs["language_token"] = "<|he|>"
+        kwargs["language"] = _lang
+        kwargs["language_token"] = f"<|{_lang}|>"
         kwargs["vad_filter"] = vad_filter
         kwargs["vad_parameters"] = dict(
             min_silence_duration_ms=vad_min_silence_ms,

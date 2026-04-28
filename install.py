@@ -81,13 +81,47 @@ def check_ffmpeg():
     if shutil.which("ffmpeg"):
         print("[Setup] ffmpeg found.")
         return True
+
+    ai_prompt = (
+        "I need to install ffmpeg on Windows and add it to PATH so a speech-to-text app "
+        "can open MP3, MP4, and M4A audio files. Please walk me through the full installation "
+        "step by step, including how to add it to the system PATH."
+    )
+    _copy_to_clipboard(ai_prompt)
+
     print(
-        "[Setup] WARNING: ffmpeg not found on PATH.\n"
-        "         MP3/MP4/M4A files require ffmpeg to decode.\n"
-        "         Install from https://ffmpeg.org and add it to PATH.\n"
-        "         WAV files work without it."
+        "\n[Setup] WARNING: ffmpeg is not installed.\n"
+        "         ffmpeg is required to open MP3, MP4, M4A, AAC, and FLAC files.\n"
+        "         WAV files work without it.\n"
+        "\n"
+        "         To install ffmpeg on Windows:\n"
+        "           1. Go to: https://www.gyan.dev/ffmpeg/builds/\n"
+        "              (direct link: https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip)\n"
+        "           2. Download the ZIP and extract it (e.g. to C:\\ffmpeg)\n"
+        "           3. Open Start → search 'environment variables' → Edit the system environment variables\n"
+        "           4. Under System Variables → Path → New → paste: C:\\ffmpeg\\bin\n"
+        "           5. Click OK, close the window, then restart this terminal\n"
+        "\n"
+        "         Need help? A step-by-step guide has been copied to your clipboard.\n"
+        "         Paste it into ChatGPT, Claude, or any AI chatbot for guided help.\n"
+        "\n"
+        "         You can continue using the tool with WAV files right now."
     )
     return False
+
+
+def _copy_to_clipboard(text: str) -> None:
+    """Copy text to clipboard. Tries pyperclip first, then Windows clip command."""
+    try:
+        import pyperclip
+        pyperclip.copy(text)
+        return
+    except Exception:
+        pass
+    try:
+        subprocess.run("clip", input=text, text=True, check=False)
+    except Exception:
+        pass
 
 
 def _load_hf_token() -> str:
@@ -124,7 +158,11 @@ def download_model():
     if not token:
         print("[Setup] No HF_TOKEN found. If the model repo is gated, set HF_TOKEN in .env.")
 
-    print(f"[Setup] Downloading model '{model_id}' (~1.5 GB) — this happens once...")
+    print(
+        f"[Setup] Downloading model '{model_id}' (~1.5 GB) — this happens once.\n"
+        "         Estimated time: 5–20 minutes depending on your connection.\n"
+        "         Do not close this window.\n"
+    )
     t0 = time.time()
     try:
         from huggingface_hub import snapshot_download
@@ -134,12 +172,33 @@ def download_model():
             ignore_patterns=["*.msgpack", "*.h5", "flax_model*"],
         )
         elapsed = time.time() - t0
-        print(f"[Setup] Model downloaded ({elapsed:.0f}s)")
+        mins, secs = divmod(int(elapsed), 60)
+        time_str = f"{mins}m {secs}s" if mins else f"{secs}s"
+        print(f"[Setup] Model downloaded ({time_str})")
         return True
     except Exception as e:
+        ai_prompt = (
+            f"I'm trying to download the HuggingFace model 'ivrit-ai/whisper-large-v3-turbo-ct2' "
+            f"for a speech-to-text app on Windows but it failed with this error: {e}\n"
+            "Can you help me fix this or explain how to download the model files manually?"
+        )
+        _copy_to_clipboard(ai_prompt)
+
         print(
-            f"[Setup] Model download failed: {e}\n"
-            "         The model will be downloaded on first transcription instead."
+            f"\n[Setup] Model download failed: {e}\n"
+            "\n"
+            "         To download manually:\n"
+            "           1. Go to: https://huggingface.co/ivrit-ai/whisper-large-v3-turbo-ct2\n"
+            "           2. Click the 'Files and versions' tab\n"
+            "           3. Download all files into a folder named 'whisper-large-v3-turbo-ct2'\n"
+            "              inside your HuggingFace cache (usually C:\\Users\\<you>\\.cache\\huggingface\\hub)\n"
+            "\n"
+            "         Or set HF_TOKEN in a .env file if the repo requires authentication.\n"
+            "\n"
+            "         Need help? A message with the error details has been copied to your clipboard.\n"
+            "         Paste it into ChatGPT, Claude, or any AI chatbot for guided help.\n"
+            "\n"
+            "         The model will be downloaded automatically on first transcription if you skip this now."
         )
         return False
 
@@ -251,9 +310,15 @@ if __name__ == "__main__":
     else:
         print("[Setup] Benchmark results found — skipping benchmark.\n")
 
-    print("\n[Setup] Done.\n")
-    print("  Offline transcription:   stt-file audio.mp3          (or: python transcribe_file.py audio.mp3)")
-    print("  Live/streaming:          stt-live                    (or: python transcribe_live.py)")
-    print("  Re-benchmark:            stt-benchmark --force       (or: python run_benchmark.py --force)")
-    print("  FastAPI server:          stt-server                  (requires: pip install -e \".[server]\")")
+    print("\n[Setup] Setup complete.\n")
+    if pathlib.Path("start.bat").exists():
+        print("  ─────────────────────────────────────────────────")
+        print("   Double-click  start.bat  to launch the web UI.")
+        print("  ─────────────────────────────────────────────────")
+    print()
+    print("  CLI commands:")
+    print("    stt-file audio.mp3         — transcribe a file")
+    print("    stt-live                   — live microphone transcription")
+    print("    stt-server                 — start the web UI server")
+    print("    stt-benchmark --force      — re-run hardware benchmark")
     print()

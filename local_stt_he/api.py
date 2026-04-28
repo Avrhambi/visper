@@ -43,6 +43,7 @@ def transcribe_chunked(
     on_segment: Callable[[dict], None],
     bucket: str = "auto",
     is_aborted: Optional[Callable[[], bool]] = None,
+    language: str = "he",
 ) -> str:
     """
     Like transcribe() but calls on_segment({"start", "end", "text"}) for each
@@ -67,7 +68,8 @@ def transcribe_chunked(
     resolved_bucket = _resolve_bucket(source, bucket)
     config = _get_config(resolved_bucket)
     engine = _get_engine(config)
-    result = engine.transcribe(source, bucket=resolved_bucket, on_segment=on_segment, is_aborted=is_aborted)
+    result = engine.transcribe(source, bucket=resolved_bucket, on_segment=on_segment,
+                               is_aborted=is_aborted, language=language)
     return result.text
 
 
