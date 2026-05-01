@@ -7,16 +7,15 @@ Stable public API for cross-project use.
 """
 from __future__ import annotations
 
-import json
 import threading
 from pathlib import Path
 from typing import Callable, Optional, Union
 
 import numpy as np
 
-# Keeps the model loaded between calls in the same process (e.g. the FastAPI server).
-_engine_cache: dict = {}
-_engine_lock = threading.Lock()
+# Single router instance — holds at most one model in memory, swaps on language change.
+_router = None
+_router_lock = threading.Lock()
 _config_cache: dict = {}
 
 
@@ -27,15 +26,13 @@ def _get_config(bucket: str) -> dict:
     return _config_cache[bucket]
 
 
-_MODEL_KEYS = ("device", "compute_type", "cpu_threads", "num_workers", "venv_path")
-
-def _get_engine(config: dict):
-    key = json.dumps({k: config.get(k) for k in _MODEL_KEYS}, sort_keys=True)
-    with _engine_lock:
-        if key not in _engine_cache:
-            from local_stt_he.transcriber import Transcriber
-            _engine_cache[key] = Transcriber(config)
-        return _engine_cache[key]
+def _get_router(hw_config: dict):
+    global _router
+    with _router_lock:
+        if _router is None:
+            from local_stt_he.model_router import ModelRouter
+            _router = ModelRouter(hw_config)
+    return _router
 
 
 def transcribe_chunked(
@@ -68,7 +65,7 @@ def transcribe_chunked(
     """
     resolved_bucket = _resolve_bucket(source, bucket)
     config = _get_config(resolved_bucket)
-    engine = _get_engine(config)
+    engine = _get_router(config).get(language)
     result = engine.transcribe(source, bucket=resolved_bucket, on_segment=on_segment,
                                is_aborted=is_aborted, language=language,
                                initial_prompt=initial_prompt)
@@ -99,7 +96,8 @@ def transcribe(
     """
     resolved_bucket = _resolve_bucket(source, bucket)
     config = _get_config(resolved_bucket)
-    engine = _get_engine(config)
+    language = "he"  # transcribe() is Hebrew-only; use transcribe_chunked() for other languages
+    engine = _get_router(config).get(language)
     result = engine.transcribe(source, bucket=resolved_bucket, is_aborted=is_aborted)
     return result.text
 
