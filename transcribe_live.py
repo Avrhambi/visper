@@ -53,6 +53,9 @@ def main():
                         help="Override accuracy_mode from config.yaml")
     parser.add_argument("--language", choices=["he", "en"], default="he",
                         help="Language to transcribe (default: he)")
+    parser.add_argument("--prompt", metavar="TEXT",
+                        help="Initial prompt: seed Whisper with names, terms, or context "
+                             "to improve accuracy (max ~55 words; use the same language as the audio)")
     args = parser.parse_args()
 
     if args.background:
@@ -114,7 +117,8 @@ def main():
             else:
                 print(f"{text}…")
 
-    streamer = LiveStreamer(on_transcript=on_transcript, config=config, source=source)
+    streamer = LiveStreamer(on_transcript=on_transcript, config=config, source=source,
+                           initial_prompt=args.prompt or None)
     streamer.start()
 
     # Status line updater — only in mic mode (file mode runs as fast as possible)

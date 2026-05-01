@@ -140,13 +140,15 @@ def transcribe_one(path: Path, engine, args, cfg: dict) -> tuple[str, float]:
 
     print(f"[STT] Transcribing {path.name} (bucket={bucket})...", file=sys.stderr)
 
+    prompt = getattr(args, "prompt", None) or None
     if getattr(args, "progress", False):
         def _progress_cb(seg: dict) -> None:
             print(f"  [{seg['start']:.1f}s] {seg['text'].strip()}", file=sys.stderr)
         result = engine.transcribe(source=path, bucket=bucket, on_segment=_progress_cb,
-                                   language=args.language)
+                                   language=args.language, initial_prompt=prompt)
     else:
-        result = engine.transcribe(source=path, bucket=bucket, language=args.language)
+        result = engine.transcribe(source=path, bucket=bucket, language=args.language,
+                                   initial_prompt=prompt)
 
     if fmt == "srt":
         text_out = _format_srt(result)
@@ -206,6 +208,9 @@ def main():
                         help="Override resource_profile from config.yaml")
     parser.add_argument("--language", choices=["he", "en"], default="he",
                         help="Language to transcribe (default: he)")
+    parser.add_argument("--prompt", metavar="TEXT",
+                        help="Initial prompt: seed Whisper with names, terms, or context "
+                             "to improve accuracy (max ~55 words; use the same language as the audio)")
     args = parser.parse_args()
 
     if args.background:

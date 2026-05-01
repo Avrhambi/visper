@@ -35,6 +35,7 @@ class LiveStreamer:
         on_transcript: Callable[[str, bool], None],
         config: Optional[dict] = None,
         source: Optional[Union[str, Path]] = None,
+        initial_prompt: Optional[str] = None,
     ):
         """
         on_transcript(text, is_final) — called from consumer thread.
@@ -66,6 +67,7 @@ class LiveStreamer:
         self._running = False
         self._prev_text: str = ""  # last chunk's raw transcription for overlap dedup
         self._language: str = config.get("language", "he") if config else "he"
+        self._initial_prompt: Optional[str] = initial_prompt or None
 
         # Graceful degradation under queue pressure
         self._pressure_mode: bool = False
@@ -121,7 +123,7 @@ class LiveStreamer:
 
     def start(self) -> None:
         from local_stt_he.api import _get_router
-        self._transcriber = _get_router(self._config).get("he")
+        self._transcriber = _get_router(self._config).get(self._language)
         self._stop_event.clear()
         self._running = True
 
@@ -400,10 +402,12 @@ class LiveStreamer:
                     fast_params = get_params_for_tier("fast", "streaming", self._transcriber._config)
                     result = self._transcriber.transcribe(chunk, bucket="streaming",
                                                           _tier_override=fast_params,
-                                                          language=self._language)
+                                                          language=self._language,
+                                                          initial_prompt=self._initial_prompt)
                 else:
                     result = self._transcriber.transcribe(chunk, bucket="streaming",
-                                                          language=self._language)
+                                                          language=self._language,
+                                                          initial_prompt=self._initial_prompt)
 
                 self._segments_transcribed += 1
                 self._total_audio_duration += result.audio_duration

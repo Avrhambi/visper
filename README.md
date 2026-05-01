@@ -63,44 +63,81 @@ Or double-click `start.bat` — it starts the server and opens the browser autom
 - Transcription library saved locally in the browser; click any timestamp to seek audio
 - RTL layout for Hebrew and Arabic; LTR for all other languages
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/health` | Device info and status |
-| POST | `/transcribe` | Upload a file, get `{text, segments, rtf}` |
-| POST | `/transcribe/stream` | Upload a file, get SSE stream of segment events |
-| WS | `/ws/live` | WebSocket live microphone transcription |
-
-```bash
-curl -F "file=@audio.mp3" -F "language=he" http://localhost:8000/transcribe
-curl -F "file=@audio.mp3" -F "language=en" -F "initial_prompt=meeting notes" http://localhost:8000/transcribe/stream
-curl http://localhost:8000/health
-```
-
 ---
 
 ## CLI
 
-### Offline file transcription
+### Offline file transcription — `stt-file`
 
 ```bash
-stt-file audio.mp3                          # transcribe → write audio.txt
-stt-file audio.wav --output srt             # SRT subtitles
-stt-file audio.mp3 --output json            # JSON with segments, RTF, confidence scores
-stt-file audio.mp3 --no-file --clip         # print + copy to clipboard, no file written
-stt-file audio.mp3 --progress              # print each segment as it is decoded
-stt-file audio.mp3 --language en           # transcribe English
-stt-file *.wav                              # batch mode
+stt-file audio.mp3                                      # transcribe → write audio.txt
+stt-file audio.wav --output srt                         # SRT subtitles
+stt-file audio.mp3 --output vtt                         # WebVTT subtitles
+stt-file audio.mp3 --output json                        # JSON with segments, RTF, config
+stt-file audio.mp3 --no-file --clip                     # print + copy to clipboard, no file written
+stt-file audio.mp3 --progress                           # print each segment as it is decoded
+stt-file audio.mp3 --language en                        # transcribe English
+stt-file audio.mp3 --prompt "team meeting, participants: Yossi, Rachel"  # initial prompt
+stt-file *.wav                                          # batch mode — all WAV files in current dir
 ```
 
-### Live / microphone
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--output` | from config | `txt` / `srt` / `vtt` / `json` |
+| `--bucket` | `auto` | Force duration bucket: `short` / `medium` / `long` / `extended` |
+| `--language` | `he` | Language code — routes to the correct model automatically |
+| `--prompt` | — | Seed Whisper with context: names, terms, topic. Use the same language as the audio |
+| `--progress` / `-p` | off | Print each segment to stderr as it decodes |
+| `--no-file` | off | Print to stdout only, don't write an output file |
+| `--clip` | off | Copy final transcript to clipboard |
+| `--accuracy` | from config | Override accuracy tier: `fast` / `balanced` / `accurate` |
+| `--profile` | from config | Override resource profile: `foreground` / `background` / `minimal` |
+| `--background` | off | Detach from terminal (Windows: silences stdout) |
+
+### Live / microphone — `stt-live`
 
 ```bash
-stt-live                                    # microphone transcription
-stt-live --file audio.mp3                  # file streaming mode
-stt-live --output result.txt               # save accumulated transcript
-stt-live --clip                            # copy to clipboard on Ctrl+C
-stt-live --progress                        # print each segment with timestamp as it arrives
-stt-live --language en                     # transcribe English
+stt-live                                                # microphone transcription
+stt-live --file audio.mp3                               # file streaming mode
+stt-live --output result.txt                            # save accumulated transcript on stop
+stt-live --clip                                         # copy to clipboard on Ctrl+C
+stt-live --progress                                     # print each segment with timestamp
+stt-live --language en                                  # transcribe English
+stt-live --prompt "dev team standup, participants: Yossi, Rachel"  # initial prompt
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--file` | — | Stream a file instead of the microphone |
+| `--language` | `he` | Language code — routes to the correct model automatically |
+| `--prompt` | — | Seed Whisper with context for every chunk in the session |
+| `--output` | — | Write accumulated transcript to a file on stop |
+| `--clip` | off | Copy accumulated transcript to clipboard on stop |
+| `--progress` / `-p` | off | Print each segment with a wall-clock timestamp |
+| `--accuracy` | from config | Override accuracy tier for the session |
+| `--background` | off | Detach from terminal |
+
+### Web server — `stt-server`
+
+```bash
+stt-server                                              # starts on http://localhost:8000
+```
+
+The server exposes a full web UI and a REST/WebSocket API.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Device, model, and status info |
+| POST | `/transcribe` | Upload a file → `{text, segments, rtf}` |
+| POST | `/transcribe/stream` | Upload a file → SSE stream of segment events |
+| WS | `/ws/live` | WebSocket live microphone transcription |
+
+```bash
+# Quick API examples
+curl -F "file=@audio.mp3" -F "language=he" http://localhost:8000/transcribe
+curl -F "file=@audio.mp3" -F "language=en" -F "initial_prompt=meeting notes" \
+     http://localhost:8000/transcribe/stream
+curl http://localhost:8000/health
 ```
 
 If the CLI entry points aren't on PATH yet (before `pip install -e .`):
@@ -108,6 +145,7 @@ If the CLI entry points aren't on PATH yet (before `pip install -e .`):
 ```bash
 python transcribe_file.py audio.mp3
 python transcribe_live.py
+python -m uvicorn local_stt_he.server:app --port 8000
 ```
 
 ---
