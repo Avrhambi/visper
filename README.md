@@ -1,8 +1,8 @@
 # וִויסְפֶּר — Local Speech-to-Text
 
-Offline Hebrew (and English) speech-to-text on your own hardware. No cloud, no subscriptions, no data leaves your machine. Self-benchmarks and configures itself on first run.
+Offline speech-to-text on your own hardware. No cloud, no subscriptions, no data leaves your machine. Self-benchmarks and configures itself on first run.
 
-Model: [`ivrit-ai/whisper-large-v3-turbo-ct2`](https://huggingface.co/ivrit-ai/whisper-large-v3-turbo-ct2)
+Supports Hebrew, English, Arabic, Russian, and other languages — each routed to the best model automatically.
 
 ---
 
@@ -40,7 +40,9 @@ Requires Python 3.10+ and [ffmpeg](https://ffmpeg.org) on PATH (WAV files work w
 
 ## What It Does
 
-Transcribes **Hebrew and English** audio files and microphone input using [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (CTranslate2). Auto-detects your hardware (CPU / CUDA / Intel iGPU via OpenVINO) and benchmarks it once to pick the best inference backend and accuracy tier. No manual configuration needed — results are cached in `benchmark_results.json`.
+Transcribes audio files and microphone input using [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (CTranslate2). Auto-detects your hardware (CPU / CUDA / Intel iGPU via OpenVINO) and benchmarks it once to pick the best inference backend and accuracy tier. No manual configuration needed — results are cached in `benchmark_results.json`.
+
+Language routing selects the right model per request: Hebrew fine-tune (`ivrit-ai`) for Hebrew, a distilled fast model for English, and `faster-whisper-large-v3` for Arabic and all other languages. Only the active model stays in memory; a language switch swaps it.
 
 ---
 
@@ -56,10 +58,10 @@ Or double-click `start.bat` — it starts the server and opens the browser autom
 - Upload single or multiple audio files (MP3, WAV, M4A, and more) — or a whole folder
 - Batch queue: sequential processing with per-file status, each result saved to library
 - Live microphone recording with real-time transcription
-- Hebrew and English language selection
+- 12-language picker (Hebrew, English, Arabic, Russian, Spanish, French, German, Portuguese, Italian, Chinese, Japanese, Korean) with automatic model routing
 - Initial prompt field — seed Whisper with names, terms, or context to improve accuracy
 - Transcription library saved locally in the browser; click any timestamp to seek audio
-- Hebrew output is displayed right-to-left; English left-to-right
+- RTL layout for Hebrew and Arabic; LTR for all other languages
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -154,7 +156,10 @@ Edit `config.yaml` to adjust behavior. Key options:
 | `vad_filter` | `true` | Enable Silero VAD |
 | `max_chunk_seconds` | `28` | Max live chunk before forced emit (CLI) |
 | `audio_denoise` | `false` | Noise reduction before Whisper (opt-in, adds ~1s per file) |
-| `confidence_retry_enabled` | `false` | Retry at next accuracy tier if confidence is low |
+| `audio_highpass` | `false` | 80 Hz high-pass filter — removes HVAC rumble and handling noise |
+| `audio_normalize` | `false` | RMS volume normalization — helps whispered or far-mic audio |
+| `hotwords` | `""` | Comma-separated terms to bias Whisper toward (names, brands, domain terms) |
+| `confidence_retry_enabled` | `null` | Retry at next accuracy tier if confidence is low; `null` = auto |
 
 Full reference with all options is in `config.yaml`.
 
@@ -168,12 +173,14 @@ Full reference with all options is in `config.yaml`.
 
 ### Accuracy tiers (when `accuracy_mode: auto`)
 
-| Tier | beam_size | best_of | temperature | Auto-selected when |
-|------|-----------|---------|-------------|-------------------|
-| `fast` | 1 | 1 | 0.0 | base RTF > 0.47 |
-| `light` | 2 | 1 | 0.0 | base RTF 0.28–0.47 |
-| `balanced` | 3 | 1 | 0.0 | base RTF 0.19–0.28 |
-| `accurate` | 5 | 3 | 0.2 | base RTF < 0.19 |
+| Tier | beam_size | best_of | temperature fallback ladder | Auto-selected when |
+|------|-----------|---------|----------------------------|-------------------|
+| `fast` | 1 | 1 | 0.0 → 0.2 → 0.4 | base RTF > 0.47 |
+| `light` | 2 | 1 | 0.0 → 0.2 → 0.4 | base RTF 0.28–0.47 |
+| `balanced` | 3 | 1 | 0.0 → 0.2 → 0.4 → 0.6 | base RTF 0.19–0.28 |
+| `accurate` | 5 | 3 | 0.0 → 0.2 → 0.4 | base RTF < 0.19 |
+
+`best_of` applies only when temperature > 0 (sampling fallback). Beam search at temperature 0 ignores it.
 
 ---
 
@@ -216,7 +223,8 @@ web/index.html               ← web UI (served by stt-server)
 local_stt_he/benchmark.py    ← hardware detection, candidate selection, fallback chain
 local_stt_he/resource.py     ← resource profile enforcement (threads, GPU, VRAM guard, priority)
 local_stt_he/params.py       ← Whisper parameter selection per bucket/tier
-local_stt_he/transcriber.py  ← dispatches to faster-whisper or openvino_genai; walks fallback chain
+local_stt_he/model_router.py ← single-slot language-based model manager; swaps on language change
+local_stt_he/transcriber.py  ← dispatches to faster-whisper or openvino_genai; audio pre-processing
 local_stt_he/api.py          ← public API: transcribe(), stream_transcribe(), transcribe_chunked()
 local_stt_he/streamer.py     ← VAD-gated live transcription with sliding window overlap
 local_stt_he/postprocess.py  ← text normalization (Hebrew + language-neutral)
@@ -250,8 +258,6 @@ python tests/test_local_config.py # full local config sweep
 
 - [ ] **Speaker diarization** — label segments by speaker (Speaker 1, Speaker 2) using pyannote.audio
 - [ ] **Live diarization** — post-session speaker labeling for recorded sessions
-- [ ] **Additional languages** — expand beyond Hebrew/English (Arabic, Russian, etc.)
-- [ ] **Second English model** — dedicated `faster-whisper-large-v3` for higher English accuracy
 
 ---
 

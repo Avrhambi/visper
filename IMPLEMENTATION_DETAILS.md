@@ -30,7 +30,7 @@ The server is built with FastAPI and designed for high-performance, asynchronous
 *   **Response**: The server sends JSON messages back to the client: `{"status": "ready"}` when calibrated, or `{"text": "..."}` for transcribed segments.
 
 ### C. Resource Management & Concurrency
-*   **Model Persistence**: The Whisper engine is cached in `_engine_cache` using a hash of the hardware config. Subsequent requests use the already-loaded model.
+*   **Model Persistence**: A single `ModelRouter` instance holds at most one `Transcriber` in memory. Subsequent requests for the same language reuse the loaded model; a different language triggers a swap (unload → load).
 *   **Thread Safety**: `faster-whisper` is thread-safe. Multiple requests (e.g., a file upload and a live recording) share the same model weights but execute their inference loops independently.
 *   **Cancellation**: The `Transcriber.transcribe` loop checks the `is_aborted()` callback after every decoded segment. If aborted, it yields control back to the server instantly.
 
