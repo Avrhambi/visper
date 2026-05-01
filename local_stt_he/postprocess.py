@@ -27,8 +27,22 @@ _LATIN_THEN_HE = re.compile(r'([A-Za-z])([֐-׿])')
 # Trailing comma or semicolon at end of a segment (Whisper hallucination)
 _TRAILING_COMMA = re.compile(r'[,;]\s*$')
 
+# Three or more consecutive identical characters (hallucination collapse, e.g. "אאאאא" → "א")
+_REPEAT_CHAR = re.compile(r'(.)\1{2,}')
+
 # Three or more consecutive identical words (hallucination collapse)
 _REPEAT_WORD = re.compile(r'\b(\S+)(?:\s+\1){2,}\b')
+
+# Known Whisper hallucinations from Hebrew YouTube subtitle training data.
+# Stripped only when they appear as a standalone phrase (surrounded by line boundaries or
+# punctuation), not mid-sentence — a real "thanks for watching" ends a sentence anyway.
+_HALLUCINATIONS_HE = re.compile(
+    r'(?<![א-תA-Za-z])'
+    r'(?:תודה שצפיתם|כתוביות נוצרו על ידי|הצטרפו אלינו|לעוד סרטונים|'
+    r'Subscribe|Like and subscribe)'
+    r'(?![א-תA-Za-z])',
+    re.IGNORECASE,
+)
 
 # Letter (Latin or Hebrew) immediately adjacent to a digit — insert space
 _LETTER_THEN_DIGIT = re.compile(r'([A-Za-zא-ת])(\d)')
@@ -48,7 +62,9 @@ def normalize_hebrew(text: str) -> str:
         '  →  ׳  (Geresh,    U+05F3)  — used for units, proper names
     - Insert a space at Hebrew/Latin script boundaries (Whisper drops spaces at code-switch)
     - Strip trailing comma or semicolon (Whisper often ends segments with ,)
-    - Collapse 3+ consecutive identical words to 1 (hallucination pattern)
+    - Collapse 3+ consecutive identical characters to 1 (hallucination pattern, e.g. "אאאאא" → "א")
+    - Collapse 3+ consecutive identical words to 1
+    - Strip known Whisper YouTube hallucination phrases
     """
     text = _NIKUD.sub('', text)
     text = _GERSHAYIM.sub('״', text)
@@ -58,7 +74,9 @@ def normalize_hebrew(text: str) -> str:
     text = _LETTER_THEN_DIGIT.sub(r'\1 \2', text)
     text = _DIGIT_THEN_LETTER.sub(r'\1 \2', text)
     text = _TRAILING_COMMA.sub('', text)
+    text = _REPEAT_CHAR.sub(r'\1', text)
     text = _REPEAT_WORD.sub(r'\1', text)
+    text = _HALLUCINATIONS_HE.sub('', text)
     return text.strip()
 
 
@@ -72,5 +90,5 @@ def normalize_text(text: str, language: str = "he") -> str:
     text = _LETTER_THEN_DIGIT.sub(r'\1 \2', text)
     text = _DIGIT_THEN_LETTER.sub(r'\1 \2', text)
     text = _TRAILING_COMMA.sub('', text)
-    text = _REPEAT_WORD.sub(r'\1', text)
+    text = _REPEAT_CHAR.sub(r'\1', text)
     return text.strip()
