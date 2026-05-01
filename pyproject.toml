@@ -19,6 +19,8 @@ dependencies = [
     "py-cpuinfo",
     "psutil",
     "noisereduce",
+    "librosa",
+    "scipy",
 ]
 
 [project.optional-dependencies]

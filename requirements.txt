@@ -10,3 +10,5 @@ py-cpuinfo
 psutil                  # optional — enables RAM monitoring; skips checks silently if missing
 webrtcvad-wheels        # optional — better VAD on Windows; fallback to energy threshold
 noisereduce             # optional — audio denoising before transcription (audio_denoise: true in config.yaml)
+librosa                 # audio resampling (to_array, file streaming)
+scipy                   # highpass filter (audio_highpass: true in config.yaml)
