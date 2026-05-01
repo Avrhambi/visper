@@ -4,6 +4,12 @@ Offline speech-to-text on your own hardware. No cloud, no subscriptions, no data
 
 Supports Hebrew, English, Arabic, Russian, and other languages — each routed to the best model automatically.
 
+**What's interesting about it:**
+- Self-benchmarks all available backends on first run (CUDA / OpenVINO / CPU), picks the best, caches results permanently
+- Falls back through a device chain at runtime if the primary fails; failure reasons are recorded, not silently dropped
+- Single-owner parameter system: one module (`params.py`) owns all Whisper inference decisions, scaled to measured hardware headroom (RTF budget)
+- Language routing swaps models on demand; only one model lives in memory at a time
+
 ---
 
 ## Getting Started

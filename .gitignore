@@ -69,6 +69,12 @@ tests/speed_test_short.ipynb
 results/
 plan/
 
+# ── Local work / personal config ──────────────────────────────────────────────
+.gitmessage
+IMPLEMENTATION_DETAILS.md
+tests/generate_insights.py
+tests/test_local_config.py
+
 # ── Miscellaneous ─────────────────────────────────────────────────────────────
 ai.wav
 tveria.wav

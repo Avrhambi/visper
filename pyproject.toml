@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "visper"
-version = "0.2.0"
+version = "1.0.0"
 description = "Hebrew speech-to-text transcription engine"
 requires-python = ">=3.10"
 dependencies = [
