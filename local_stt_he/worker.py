@@ -1,8 +1,8 @@
 """
-core/worker.py
+local_stt_he/worker.py
 --------------
 Persistent transcription worker — runs INSIDE a device venv as a subprocess.
-Spawned by core/transcriber.py when a venv_path is present in the config.
+Spawned by local_stt_he/transcriber.py when a venv_path is present in the config.
 
 Protocol
 --------
@@ -82,7 +82,7 @@ def _load_model(config: dict, root: str):
 
     elif device == "openvino":
         import openvino_genai as ov_genai
-        ov_dir = Path(root) / "ov_model"
+        ov_dir = Path(root) / "models_ov" / "whisper-large-v3-turbo-ov"
         if not ov_dir.exists():
             raise RuntimeError(f"OpenVINO model not found at {ov_dir}")
         return ov_genai.WhisperPipeline(
