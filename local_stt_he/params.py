@@ -20,7 +20,7 @@ TIERS = {
     "fast": {
         "beam_size": 1,
         "best_of": 1,
-        "temperature": 0.0,
+        "temperature": (0.0, 0.2, 0.4),
         "patience": 1.0,
         "compression_ratio_threshold": 2.4,
         "log_prob_threshold": -1.0,
@@ -36,7 +36,7 @@ TIERS = {
     "light": {
         "beam_size": 2,
         "best_of": 1,
-        "temperature": 0.0,
+        "temperature": (0.0, 0.2, 0.4),
         "patience": 1.0,
         "compression_ratio_threshold": 2.3,
         "log_prob_threshold": -0.9,
@@ -52,7 +52,7 @@ TIERS = {
     "balanced": {
         "beam_size": 3,
         "best_of": 1,
-        "temperature": 0.0,
+        "temperature": (0.0, 0.2, 0.4, 0.6),
         "patience": 1.0,
         "compression_ratio_threshold": 2.2,
         "log_prob_threshold": -0.8,
@@ -67,16 +67,16 @@ TIERS = {
     },
     "accurate": {
         "beam_size": 5,
-        "best_of": 3,
-        "temperature": 0.2,
+        "best_of": 3,  # only applies during temperature sampling fallback (temp>0); ignored by beam search
+        "temperature": (0.0, 0.2, 0.4),
         "patience": 1.5,
-        "compression_ratio_threshold": 1.8,
+        "compression_ratio_threshold": 2.4,
         "log_prob_threshold": -0.5,
         "no_speech_threshold": 0.4,
         "per_bucket": {
             "streaming": {"condition_on_prev_text": False, "without_timestamps": True},
             "short":     {"condition_on_prev_text": False, "without_timestamps": False},
-            "medium":    {"condition_on_prev_text": True,  "without_timestamps": False},
+            "medium":    {"condition_on_prev_text": False, "without_timestamps": False},
             "long":      {"condition_on_prev_text": True,  "without_timestamps": False},
             "extended":  {"condition_on_prev_text": True,  "without_timestamps": False},
         },
@@ -97,7 +97,7 @@ _logged_first_call = False
 class WhisperParams:
     beam_size: int
     best_of: int
-    temperature: float
+    temperature: object  # float or tuple[float, ...] — tuple enables fallback ladder
     patience: float
     condition_on_prev_text: bool
     without_timestamps: bool
@@ -225,7 +225,7 @@ def get_params(bucket: str, hw_config: dict) -> WhisperParams:
         if manual.get("beam_size", 0) > 0:
             params.beam_size = manual["beam_size"]
         if manual.get("temperature", -1) >= 0:
-            params.temperature = manual["temperature"]
+            params.temperature = (manual["temperature"],)  # single value disables fallback ladder
         if manual.get("best_of", 0) > 0:
             params.best_of = manual["best_of"]
         if manual.get("patience", -1) >= 0:
