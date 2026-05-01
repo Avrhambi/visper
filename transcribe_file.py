@@ -39,7 +39,7 @@ import time
 
 ROOT = Path(__file__).parent
 
-from local_stt_he.api import _resolve_bucket
+from visper.api import _resolve_bucket
 
 
 def _rtf_speed_label(rtf: float) -> str:
@@ -223,8 +223,8 @@ def main():
     cfg = _load_config()
 
     if args.accuracy or args.profile:
-        import local_stt_he.params as _p
-        import local_stt_he.resource as _r
+        import visper.params as _p
+        import visper.resource as _r
         _override = dict(cfg)
         if args.accuracy:
             _override['accuracy_mode'] = args.accuracy
@@ -233,8 +233,8 @@ def main():
         _p._load_user_config = lambda: _override
         _r._load_user_config = lambda: _override
 
-    from local_stt_he.benchmark import get_best_config
-    from local_stt_he.model_router import ModelRouter
+    from visper.benchmark import get_best_config
+    from visper.model_router import ModelRouter
 
     first_path = Path(args.files[0])
     first_bucket = _resolve_bucket(first_path, args.bucket)

@@ -1,9 +1,9 @@
 """
-local_stt_he/transcriber.py
+visper/transcriber.py
 -------------------
 Unified transcription engine. Accepts a config dict from benchmark.get_best_config().
 Dispatches to faster-whisper (CPU/CUDA) or openvino_genai backend.
-Whisper parameters are resolved per-call via local_stt_he/params.py.
+Whisper parameters are resolved per-call via visper/params.py.
 """
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ class Transcriber:
 
         Applies resource profile before loading the backend.
         """
-        from local_stt_he.resource import apply_profile, check_memory_headroom, check_vram_before_load
+        from visper.resource import apply_profile, check_memory_headroom, check_vram_before_load
         config = apply_profile(config)
         config = check_memory_headroom(config)
         config = check_vram_before_load(config)
@@ -115,7 +115,7 @@ class Transcriber:
             print(f"[Transcriber] Load failed ({self._config_label}): {e}", file=sys.stderr)
 
         # Walk fallback chain from benchmark_results.json
-        from local_stt_he.benchmark import RESULTS_PATH, probe_and_cache_fallback
+        from visper.benchmark import RESULTS_PATH, probe_and_cache_fallback
         fallback_chain: list[dict] = []
         if RESULTS_PATH.exists():
             try:
@@ -262,11 +262,11 @@ class Transcriber:
         """
         source: file path or float32 numpy array at 16 kHz.
         bucket: duration hint for params selection.
-        _tier_override: WhisperParams instance from local_stt_he.params; bypasses auto-selection.
+        _tier_override: WhisperParams instance from visper.params; bypasses auto-selection.
                         Used by LiveStreamer for graceful degradation under queue pressure.
         is_aborted: optional callable returning bool. Checked between segments.
         """
-        from local_stt_he.params import get_params
+        from visper.params import get_params
 
         _lang = language if language is not None else self._language
         params = _tier_override if _tier_override is not None else get_params(bucket, self._config)
@@ -335,7 +335,7 @@ class Transcriber:
                     and bucket != "streaming"
                     and seg_list
                     and not self._confidence_ok(seg_list, params.log_prob_threshold)):
-                from local_stt_he.params import next_tier, get_params_for_tier
+                from visper.params import next_tier, get_params_for_tier
                 upgrade = next_tier(params.tier_used)
                 if upgrade:
                     print(f"[STT] Low confidence — retrying at '{upgrade}' tier", file=sys.stderr)
@@ -356,7 +356,7 @@ class Transcriber:
                                 for s in seg_list]
                     text = "".join(s.text for s in seg_list).strip()
 
-            from local_stt_he.postprocess import normalize_text
+            from visper.postprocess import normalize_text
             text = normalize_text(text, _lang)
 
         elif self._backend_type == "openvino":
@@ -372,7 +372,7 @@ class Transcriber:
             _ov_set(gen_config, "repetition_penalty", params.patience)
             result = self._backend.generate(audio, gen_config)
             text = result.texts[0].strip() if result.texts else ""
-            from local_stt_he.postprocess import normalize_text
+            from visper.postprocess import normalize_text
             text = normalize_text(text, _lang)
             segments = []
             if not params.without_timestamps and hasattr(result, "chunks") and result.chunks:

@@ -73,11 +73,11 @@ def main():
             _cfg['accuracy_mode'] = args.accuracy
         except Exception:
             _cfg = {'accuracy_mode': args.accuracy}
-        import local_stt_he.params as _p
+        import visper.params as _p
         _p._load_user_config = lambda: _cfg
 
-    from local_stt_he.benchmark import get_best_config
-    from local_stt_he.streamer import LiveStreamer
+    from visper.benchmark import get_best_config
+    from visper.streamer import LiveStreamer
 
     config = get_best_config("streaming")
     config["language"] = args.language

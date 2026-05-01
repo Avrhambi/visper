@@ -1,5 +1,5 @@
 """
-local_stt_he/resource.py
+visper/resource.py
 ----------------
 Single place that reads resource_profile from config.yaml and enforces
 thread caps, GPU restrictions, and process priority.

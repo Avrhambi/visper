@@ -62,7 +62,7 @@ async def _save_upload(file: UploadFile) -> pathlib.Path:
 async def warmup():
     async def _load():
         try:
-            from local_stt_he.api import _get_config, _get_router
+            from visper.api import _get_config, _get_router
             cfg = _get_config("medium")
             await asyncio.to_thread(lambda: _get_router(cfg).get("he"))
         except Exception as e:
@@ -73,8 +73,8 @@ async def warmup():
 @app.get("/health")
 def health():
     try:
-        from local_stt_he.benchmark import get_best_config
-        from local_stt_he.api import _router
+        from visper.benchmark import get_best_config
+        from visper.api import _router
         cfg = get_best_config("medium")
         model = _router._active_model_id if _router else None
         return {
@@ -92,14 +92,14 @@ async def transcribe_endpoint(file: UploadFile = File(...), language: str = Form
     tmp_path = await _save_upload(file)
     try:
         import soundfile as sf
-        from local_stt_he.api import transcribe_chunked
+        from visper.api import transcribe_chunked
 
         try:
             audio_duration = sf.info(str(tmp_path)).duration
         except Exception:
             audio_duration = None
 
-        from local_stt_he.api import _bucket_for_duration
+        from visper.api import _bucket_for_duration
         bucket = _bucket_for_duration(audio_duration)
 
         segments: list = []
@@ -130,15 +130,15 @@ async def transcribe_stream(request: Request, file: UploadFile = File(...), lang
     def _run() -> None:
         try:
             import soundfile as sf
-            from local_stt_he.api import transcribe_chunked
+            from visper.api import transcribe_chunked
             try:
                 audio_duration = sf.info(str(tmp_path)).duration
             except Exception:
                 audio_duration = None
-            from local_stt_he.api import _bucket_for_duration
+            from visper.api import _bucket_for_duration
             bucket = _bucket_for_duration(audio_duration)
 
-            from local_stt_he.postprocess import normalize_text
+            from visper.postprocess import normalize_text
             _norm = lambda t: normalize_text(t, language)
             t0 = time.monotonic()
             full_text = transcribe_chunked(
@@ -198,7 +198,7 @@ async def transcribe_stream(request: Request, file: UploadFile = File(...), lang
 @app.websocket("/ws/live")
 async def live_ws(websocket: WebSocket):
     await websocket.accept()
-    from local_stt_he.api import _get_config, _get_router
+    from visper.api import _get_config, _get_router
 
     language       = websocket.query_params.get("language", "he")
     initial_prompt = websocket.query_params.get("initial_prompt", "") or None
@@ -292,7 +292,7 @@ def main() -> None:
 
     logging.getLogger("uvicorn.access").addFilter(_NoHealthLog())
 
-    uvicorn.run("local_stt_he.server:app", host="0.0.0.0", port=8000, reload=False)
+    uvicorn.run("visper.server:app", host="0.0.0.0", port=8000, reload=False)
 
 
 if __name__ == "__main__":

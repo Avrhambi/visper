@@ -1,5 +1,5 @@
 """
-local_stt_he/streamer.py
+visper/streamer.py
 ----------------
 VAD-gated live chunked transcription pipeline.
 
@@ -20,7 +20,7 @@ from typing import Callable, Optional, Union
 
 import numpy as np
 
-from local_stt_he.constants import SAMPLE_RATE, CHANNELS, BLOCK_SIZE, DTYPE
+from visper.constants import SAMPLE_RATE, CHANNELS, BLOCK_SIZE, DTYPE
 
 ROOT = Path(__file__).parent.parent
 
@@ -46,7 +46,7 @@ class LiveStreamer:
         self._source = Path(source) if source else None
 
         if config is None:
-            from local_stt_he.benchmark import get_best_config
+            from visper.benchmark import get_best_config
             config = get_best_config("streaming")
         self._config = config
 
@@ -95,7 +95,7 @@ class LiveStreamer:
         except Exception:
             self._noise_calibration_seconds = 1.5
             self._overlap_samples = int(2.0 * SAMPLE_RATE)
-        from local_stt_he.resource import get_idle_unload_seconds
+        from visper.resource import get_idle_unload_seconds
         self._idle_unload_seconds = get_idle_unload_seconds()
 
     @property
@@ -122,7 +122,7 @@ class LiveStreamer:
         }
 
     def start(self) -> None:
-        from local_stt_he.api import _get_router
+        from visper.api import _get_router
         self._transcriber = _get_router(self._config).get(self._language)
         self._stop_event.clear()
         self._running = True
@@ -398,7 +398,7 @@ class LiveStreamer:
 
             try:
                 if self._pressure_mode:
-                    from local_stt_he.params import get_params_for_tier
+                    from visper.params import get_params_for_tier
                     fast_params = get_params_for_tier("fast", "streaming", self._transcriber._config)
                     result = self._transcriber.transcribe(chunk, bucket="streaming",
                                                           _tier_override=fast_params,
@@ -451,7 +451,7 @@ class LiveStreamer:
             print("[STT] Idle — model unloaded to free memory", file=sys.stderr)
 
     def _reload_model(self) -> None:
-        from local_stt_he.api import _get_router
+        from visper.api import _get_router
         print("[STT] Speech detected — reloading model...", file=sys.stderr)
         self._transcriber = _get_router(self._config).get("he")
 
@@ -469,7 +469,7 @@ class LiveStreamer:
     def _check_memory(self) -> None:
         if self._stop_event.is_set():
             return
-        from local_stt_he.resource import check_memory_during_session
+        from visper.resource import check_memory_during_session
         action = check_memory_during_session()
         if action == "demote" and self._transcriber:
             self._transcriber.unload()

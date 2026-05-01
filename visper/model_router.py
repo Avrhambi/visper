@@ -1,5 +1,5 @@
 """
-local_stt_he/model_router.py
+visper/model_router.py
 -----------------------------
 Single-slot model router. Holds at most one Transcriber in memory.
 Swaps models based on requested language. Swap cost = model load time (~5-30s).
@@ -58,7 +58,7 @@ class ModelRouter:
         return model_map.get(language, model_map.get("_default", _DEFAULT_MODELS["_default"]))
 
     def get(self, language: str) -> object:
-        from local_stt_he.transcriber import Transcriber
+        from visper.transcriber import Transcriber
         target = self.resolve_model_id(language)
         with self._lock:
             if self._active_model_id == target and self._transcriber is not None:

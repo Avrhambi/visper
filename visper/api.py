@@ -1,9 +1,9 @@
 """
-local_stt_he/api.py
+visper/api.py
 --------------------
 Stable public API for cross-project use.
 
-    from local_stt_he import transcribe, stream_transcribe, transcribe_chunked
+    from visper import transcribe, stream_transcribe, transcribe_chunked
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ _config_cache: dict = {}
 
 def _get_config(bucket: str) -> dict:
     if bucket not in _config_cache:
-        from local_stt_he.benchmark import get_best_config
+        from visper.benchmark import get_best_config
         _config_cache[bucket] = get_best_config(bucket)
     return _config_cache[bucket]
 
@@ -30,7 +30,7 @@ def _get_router(hw_config: dict):
     global _router
     with _router_lock:
         if _router is None:
-            from local_stt_he.model_router import ModelRouter
+            from visper.model_router import ModelRouter
             _router = ModelRouter(hw_config)
     return _router
 
@@ -119,7 +119,7 @@ def stream_transcribe(
         None = microphone live mode.
         File path = file streaming mode (incremental output).
     """
-    from local_stt_he.streamer import LiveStreamer
+    from visper.streamer import LiveStreamer
 
     config = _get_config("streaming")
     streamer = LiveStreamer(on_transcript=on_transcript, config=config, source=source)

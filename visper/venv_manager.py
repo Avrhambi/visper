@@ -1,5 +1,5 @@
 """
-local_stt_he/venv_manager.py
+visper/venv_manager.py
 --------------------
 Manages isolated Python virtual environments for each device backend.
 

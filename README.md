@@ -145,7 +145,7 @@ If the CLI entry points aren't on PATH yet (before `pip install -e .`):
 ```bash
 python transcribe_file.py audio.mp3
 python transcribe_live.py
-python -m uvicorn local_stt_he.server:app --port 8000
+python -m uvicorn visper.server:app --port 8000
 ```
 
 ---
@@ -157,7 +157,7 @@ pip install -e .
 ```
 
 ```python
-from local_stt_he import transcribe, stream_transcribe, transcribe_chunked
+from visper import transcribe, stream_transcribe, transcribe_chunked
 
 # Offline — returns full transcript text
 text = transcribe("audio.mp3")
@@ -259,16 +259,16 @@ start.bat                    ← Windows launcher: setup + server + browser (dou
 update.bat                   ← Windows updater: git pull + pip install (double-click)
 install.py                   ← first-run setup: installs deps, downloads model, runs benchmark
 web/index.html               ← web UI (served by visper-server)
-local_stt_he/benchmark.py    ← hardware detection, candidate selection, fallback chain
-local_stt_he/resource.py     ← resource profile enforcement (threads, GPU, VRAM guard, priority)
-local_stt_he/params.py       ← Whisper parameter selection per bucket/tier
-local_stt_he/model_router.py ← single-slot language-based model manager; swaps on language change
-local_stt_he/transcriber.py  ← dispatches to faster-whisper or openvino_genai; audio pre-processing
-local_stt_he/api.py          ← public API: transcribe(), stream_transcribe(), transcribe_chunked()
-local_stt_he/streamer.py     ← VAD-gated live transcription with sliding window overlap
-local_stt_he/postprocess.py  ← text normalization (Hebrew + language-neutral)
-local_stt_he/constants.py    ← audio constants (SAMPLE_RATE, CHANNELS, BLOCK_SIZE, DTYPE)
-local_stt_he/server.py       ← FastAPI server
+visper/benchmark.py    ← hardware detection, candidate selection, fallback chain
+visper/resource.py     ← resource profile enforcement (threads, GPU, VRAM guard, priority)
+visper/params.py       ← Whisper parameter selection per bucket/tier
+visper/model_router.py ← single-slot language-based model manager; swaps on language change
+visper/transcriber.py  ← dispatches to faster-whisper or openvino_genai; audio pre-processing
+visper/api.py          ← public API: transcribe(), stream_transcribe(), transcribe_chunked()
+visper/streamer.py     ← VAD-gated live transcription with sliding window overlap
+visper/postprocess.py  ← text normalization (Hebrew + language-neutral)
+visper/constants.py    ← audio constants (SAMPLE_RATE, CHANNELS, BLOCK_SIZE, DTYPE)
+visper/server.py       ← FastAPI server
 transcribe_file.py            ← CLI offline transcription
 transcribe_live.py            ← CLI live/streaming transcription
 run_benchmark.py              ← benchmark entry point

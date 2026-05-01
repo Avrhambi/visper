@@ -1,8 +1,8 @@
 """
-local_stt_he/worker.py
+visper/worker.py
 --------------
 Persistent transcription worker — runs INSIDE a device venv as a subprocess.
-Spawned by local_stt_he/transcriber.py when a venv_path is present in the config.
+Spawned by visper/transcriber.py when a venv_path is present in the config.
 
 Protocol
 --------

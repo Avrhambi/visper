@@ -1,5 +1,5 @@
 """
-local_stt_he/benchmark.py
+visper/benchmark.py
 -----------------
 Single source of truth for all hardware detection and config selection.
 Writes benchmark_results.json and exposes get_best_config(bucket).
@@ -472,7 +472,7 @@ def run_fast_benchmark(force: bool = False) -> None:
             best[b] = None
 
     # Stamp venv path so Transcriber can use the same venv
-    from local_stt_he import venv_manager
+    from visper import venv_manager
     vp = venv_manager.venv_path(working_primary["device"])
     if vp.exists():
         for cfg in best.values():
@@ -792,7 +792,7 @@ def _run_candidate_in_venv(
 
     audio_files_info: {bucket: {"path": str, "target_duration": float}}
     """
-    from local_stt_he.venv_manager import ensure_venv, python_exe as venv_python
+    from visper.venv_manager import ensure_venv, python_exe as venv_python
 
     device = candidate["device"]
     ensure_venv(device)
@@ -1180,7 +1180,7 @@ def run_benchmark(force: bool = False, quick: bool = False, full: bool = False) 
             print(f"  {bucket:<12} (no result)")
 
     # ── Venv cleanup: keep only winning device venvs ─────────────────────────
-    from local_stt_he import venv_manager
+    from visper import venv_manager
     winning_devices = {cfg["device"] for cfg in best.values() if cfg}
     all_devices = set(venv_manager.DEVICE_PACKAGES.keys())
     for dev in all_devices - winning_devices:

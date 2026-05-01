@@ -1,5 +1,5 @@
 """
-local_stt_he/postprocess.py
+visper/postprocess.py
 -------------------
 Rules-based Hebrew text normalization applied after Whisper transcription.
 Zero runtime cost — pure regex, no models.

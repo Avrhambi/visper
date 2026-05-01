@@ -1,8 +1,8 @@
 """
-local_stt_he/benchmark_worker.py
+visper/benchmark_worker.py
 ------------------------
 Benchmark worker — runs INSIDE a device venv as a subprocess.
-Invoked by local_stt_he/benchmark.py via subprocess.Popen.
+Invoked by visper/benchmark.py via subprocess.Popen.
 
 Protocol
 --------
