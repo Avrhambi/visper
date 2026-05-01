@@ -134,10 +134,7 @@ def stream_transcribe(
         streamer.stop()
 
 
-def _resolve_bucket(source, bucket: str) -> str:
-    if bucket != "auto":
-        return bucket
-    duration = _get_duration(source)
+def _bucket_for_duration(duration: Optional[float]) -> str:
     if duration is None:
         return "medium"
     if duration < 10:
@@ -147,6 +144,12 @@ def _resolve_bucket(source, bucket: str) -> str:
     if duration < 60:
         return "long"
     return "extended"
+
+
+def _resolve_bucket(source, bucket: str) -> str:
+    if bucket != "auto":
+        return bucket
+    return _bucket_for_duration(_get_duration(source))
 
 
 def _get_duration(source) -> Optional[float]:

@@ -99,16 +99,8 @@ async def transcribe_endpoint(file: UploadFile = File(...), language: str = Form
         except Exception:
             audio_duration = None
 
-        if audio_duration is None:
-            bucket = "auto"
-        elif audio_duration < 10:
-            bucket = "short"
-        elif audio_duration < 30:
-            bucket = "medium"
-        elif audio_duration < 60:
-            bucket = "long"
-        else:
-            bucket = "extended"
+        from local_stt_he.api import _bucket_for_duration
+        bucket = _bucket_for_duration(audio_duration)
 
         segments: list = []
         t0 = time.monotonic()
@@ -143,17 +135,9 @@ async def transcribe_stream(request: Request, file: UploadFile = File(...), lang
                 audio_duration = sf.info(str(tmp_path)).duration
             except Exception:
                 audio_duration = None
-            if audio_duration is None:
-                bucket = "auto"
-            elif audio_duration < 10:
-                bucket = "short"
-            elif audio_duration < 30:
-                bucket = "medium"
-            elif audio_duration < 60:
-                bucket = "long"
-            else:
-                bucket = "extended"
-            
+            from local_stt_he.api import _bucket_for_duration
+            bucket = _bucket_for_duration(audio_duration)
+
             from local_stt_he.postprocess import normalize_text
             _norm = lambda t: normalize_text(t, language)
             t0 = time.monotonic()
