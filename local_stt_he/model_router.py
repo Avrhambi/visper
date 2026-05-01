@@ -23,30 +23,19 @@ _DEFAULT_MODELS: dict[str, str] = {
 }
 
 
-def _load_model_map() -> dict[str, str]:
-    """Merge config.yaml `models` section over built-in defaults."""
+def _load_router_config() -> tuple[dict[str, str], str]:
+    """Return (model_map, force_model) parsed from config.yaml in one read."""
     try:
         import yaml
         path = ROOT / "config.yaml"
         if path.exists():
             cfg = yaml.safe_load(path.read_text()) or {}
-            overrides = cfg.get("models") or {}
-            return {**_DEFAULT_MODELS, **overrides}
+            model_map = {**_DEFAULT_MODELS, **(cfg.get("models") or {})}
+            force = cfg.get("force_model", "") or ""
+            return model_map, force
     except Exception:
         pass
-    return dict(_DEFAULT_MODELS)
-
-
-def _load_force_model() -> str:
-    try:
-        import yaml
-        path = ROOT / "config.yaml"
-        if path.exists():
-            cfg = yaml.safe_load(path.read_text()) or {}
-            return cfg.get("force_model", "") or ""
-    except Exception:
-        pass
-    return ""
+    return dict(_DEFAULT_MODELS), ""
 
 
 class ModelRouter:
@@ -63,10 +52,9 @@ class ModelRouter:
         self._transcriber = None
 
     def resolve_model_id(self, language: str) -> str:
-        force = _load_force_model()
+        model_map, force = _load_router_config()
         if force:
             return force
-        model_map = _load_model_map()
         return model_map.get(language, model_map.get("_default", _DEFAULT_MODELS["_default"]))
 
     def get(self, language: str) -> object:
