@@ -12,7 +12,31 @@
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      /* Custom Scrollbar (Firefox) */
+      scrollbar-width: thin;
+      scrollbar-color: #E5E7EB transparent;
+    }
+
+    /* Custom Scrollbar (Webkit: Chrome, Safari, Edge) */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background-color: #E5E7EB;
+      border-radius: 10px;
+      border: 1px solid transparent;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background-color: #D1D5DB;
+    }
 
     html { height: 100%; }
 
@@ -199,14 +223,14 @@
     .create-card {
       background: var(--surface);
       border-radius: var(--radius-2xl);
-      padding: 2rem;
+      padding: 2.5rem 2rem 2rem;
       box-shadow: var(--shadow-xl);
       text-align: center;
-      min-height: 400px;
+      min-height: 480px;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
       transition: var(--transition);
       position: relative;
     }
@@ -214,32 +238,34 @@
     .dropzone {
       width: 92%;
       height: 90%;
-      border: 1px solid var(--border-light);
+      border: 2px dashed var(--border);
+      background: #FAFAFA;
       border-radius: var(--radius-xl);
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 1.5rem;
+      gap: 1rem;
       cursor: pointer;
       transition: var(--transition);
       padding: 2.5rem;
       margin: auto;
     }
     .dropzone:hover {
-      background: #FAFAFA;
-      border-color: var(--border);
+      background: #F3F4F6;
+      border-color: #9CA3AF;
     }
     .dropzone-icon {
       color: #9CA3AF;
       transition: var(--transition);
+      margin-bottom: 0.5rem;
     }
     .dropzone:hover .dropzone-icon {
       color: var(--text);
-      transform: translateY(-2px);
+      transform: translateY(-4px);
     }
-    .dropzone-text h3 { font-size: 1.25rem; font-weight: 600; margin-bottom: 0.25rem; }
-    .dropzone-text p { font-size: 0.8125rem; color: var(--text-muted); }
+    .dropzone-text h3 { font-size: 1.25rem; font-weight: 700; margin-bottom: 0.25rem; }
+    .dropzone-text p { font-size: 0.8125rem; color: var(--text-muted); font-weight: 500; }
 
     /* ── File Chip & Action ── */
     .file-selection {
@@ -282,8 +308,28 @@
     .batch-status.processing { background: #DBEAFE; color: #1D4ED8; }
     .batch-status.done       { background: #D1FAE5; color: #065F46; }
     .batch-status.error      { background: #FEE2E2; color: #991B1B; }
-    .dropzone-folder-btn { background: none; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0.3rem 0.75rem; font-size: 0.75rem; color: var(--text-muted); cursor: pointer; display: inline-flex; align-items: center; gap: 0.35rem; transition: var(--transition); margin-top: 0.5rem; }
-    .dropzone-folder-btn:hover { color: var(--text); border-color: var(--text-muted); background: var(--bg); }
+    .dropzone-folder-btn {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.6rem 1.5rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: var(--transition);
+      margin-top: 0.5rem;
+      box-shadow: var(--shadow-sm);
+    }
+    .dropzone-folder-btn:hover {
+      color: var(--text);
+      border-color: var(--border);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-md);
+    }
 
     .btn-obsidian {
       background: #1A1A1A;
@@ -308,8 +354,11 @@
       display: none;
       flex-direction: column;
       align-items: center;
-      gap: 2rem;
+      justify-content: center;
+      gap: 2.5rem;
       width: 100%;
+      flex: 1;
+      margin-top: -2rem; /* Slight offset to counter settings-row height for true visual center */
     }
     .mic-button-pulse {
       width: 80px;
@@ -608,21 +657,71 @@
     .seg-span:hover { background: rgba(37, 99, 235, 0.08); }
     .seg-active { background: rgba(37, 99, 235, 0.13); }
 
-    /* ── Language Select ── */
-    .lang-select-wrap {
-      position: absolute;
-      top: 1.25rem;
-      right: 1.25rem;
+    /* ── Settings Row (Prompt & Lang) ── */
+    .settings-row {
+      width: 94%;
+      display: flex;
+      gap: 0.75rem;
+      margin-bottom: 2rem;
+      align-items: flex-start;
+      position: relative;
       z-index: 210;
     }
-    .lang-select {
-      background: #F3F4F6;
-      border: 1px solid var(--border-light);
-      border-radius: 999px;
-      padding: 5px 16px;
-      font-size: 0.8rem;
-      font-weight: 700;
+
+    /* ── Initial Prompt ── */
+    .prompt-wrap {
+      flex: 1;
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .prompt-icon {
+      position: absolute;
+      top: 13px;
       color: var(--text-muted);
+      pointer-events: none;
+      opacity: 0.6;
+      transition: all 0.3s ease;
+    }
+    .prompt-input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 1.25rem;
+      padding: 10px 2.85rem;
+      font-size: 0.875rem;
+      font-family: 'Assistant', sans-serif;
+      color: var(--text);
+      outline: none;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      direction: rtl;
+      resize: none;
+      height: 46px;
+      line-height: 1.5;
+      overflow-y: hidden;
+    }
+    .prompt-input:focus {
+      border-color: #2563EB;
+      background: white;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+      overflow-y: auto;
+    }
+    .prompt-input::placeholder { color: var(--text-muted); opacity: 0.6; }
+
+    /* ── Language Select ── */
+    .lang-select-wrap {
+      position: relative;
+      flex-shrink: 0;
+    }
+    .lang-select {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0 1.25rem;
+      height: 46px;
+      font-size: 0.875rem;
+      font-weight: 700;
+      color: var(--text);
       cursor: pointer;
       outline: none;
       font-family: 'Assistant', sans-serif;
@@ -630,34 +729,26 @@
       direction: rtl;
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 8px;
+      box-shadow: var(--shadow-sm);
     }
-    .lang-select:hover { border-color: var(--border); color: var(--text); }
+    .lang-select:hover { border-color: var(--text-muted); background: var(--bg); }
     .lang-menu {
       top: calc(100% + 8px);
       bottom: auto !important;
+      max-height: 200px; /* Exactly 5 items (approx 40px each) */
+      overflow-y: auto !important;
+      width: 160px !important;
+      padding: 2px 0;
+      scrollbar-width: thin;
     }
-
-    /* ── Initial Prompt ── */
-    .prompt-wrap {
-      width: 100%;
-      padding: 0 0.25rem;
+    .lang-menu::-webkit-scrollbar {
+      width: 4px;
     }
-    .prompt-input {
-      width: 100%;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      padding: 0.5rem 0.85rem;
-      font-size: 0.8125rem;
-      font-family: 'Assistant', sans-serif;
-      color: var(--text);
-      outline: none;
-      transition: border-color 0.2s;
-      direction: rtl;
+    .lang-menu::-webkit-scrollbar-thumb {
+      background-color: #E5E7EB;
+      border-radius: 10px;
     }
-    .prompt-input:focus { border-color: #9CA3AF; }
-    .prompt-input::placeholder { color: var(--text-muted); opacity: 0.7; }
 
     /* ── Download Dropdown ── */
     .dl-wrapper { position: relative; display: inline-flex; flex-direction: column; align-items: center; }
@@ -725,39 +816,53 @@
     </div>
 
     <div id="createCard" class="create-card">
-      <!-- Language selector -->
-      <div class="lang-select-wrap">
-        <div class="dl-wrapper">
-          <button id="langSelectBtn" class="lang-select" onclick="toggleLangMenu(event)">
-            <span style="opacity: 0.8; font-weight: 600;">שפה:</span>
-            <span id="currentLangText">עברית</span>
-            <i data-lucide="chevron-down" size="14" style="opacity: 0.5;"></i>
-          </button>
-          <div id="langMenu" class="dl-menu lang-menu">
-            <button class="dl-option" onclick="setLanguage('he')">עברית</button>
-            <button class="dl-option" onclick="setLanguage('en')">אנגלית</button>
+      
+      <!-- Settings Row: Language & Prompt -->
+      <div class="settings-row">
+        <!-- Language selector (Right of context field in RTL) -->
+        <div class="lang-select-wrap">
+          <div class="dl-wrapper">
+            <button id="langSelectBtn" class="lang-select" onclick="toggleLangMenu(event)">
+              <span id="currentLangText">עברית</span>
+              <i data-lucide="chevron-down" size="14" style="opacity: 0.5;"></i>
+            </button>
+            <div id="langMenu" class="dl-menu lang-menu">
+              <button class="dl-option" onclick="setLanguage('he')">עברית</button>
+              <button class="dl-option" onclick="setLanguage('en')">אנגלית</button>
+              <button class="dl-option" onclick="setLanguage('ar')">ערבית</button>
+              <button class="dl-option" onclick="setLanguage('ru')">רוסית</button>
+              <button class="dl-option" onclick="setLanguage('es')">ספרדית</button>
+              <button class="dl-option" onclick="setLanguage('fr')">צרפתית</button>
+              <button class="dl-option" onclick="setLanguage('de')">גרמנית</button>
+              <button class="dl-option" onclick="setLanguage('it')">איטלקית</button>
+              <button class="dl-option" onclick="setLanguage('pt')">פורטוגזית</button>
+              <button class="dl-option" onclick="setLanguage('zh')">סינית</button>
+              <button class="dl-option" onclick="setLanguage('ja')">יפנית</button>
+              <button class="dl-option" onclick="setLanguage('ko')">קוריאנית</button>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Initial Prompt -->
-      <div class="prompt-wrap">
-        <input type="text" id="promptInput" class="prompt-input"
-               placeholder="רמז ראשוני (אופציונלי) — שמות, מונחים, הקשר..."
-               oninput="initialPrompt = this.value.trim()">
+        <!-- Initial Prompt -->
+        <div class="prompt-wrap">
+          <i data-lucide="text-cursor-input" class="prompt-icon" size="18"></i>
+          <textarea id="promptInput" class="prompt-input"
+                 placeholder="הקשר לתמלול: שמות, מונחים..."
+                 oninput="initialPrompt = this.value.trim()"></textarea>
+        </div>
       </div>
 
       <!-- File Mode -->
       <div id="viewFile" class="dropzone" onclick="triggerFileUpload()">
         <div class="dropzone-icon">
-          <i data-lucide="music" stroke-width="1.2" size="64"></i>
+          <i data-lucide="upload-cloud" stroke-width="1.2" size="56"></i>
         </div>
         <div class="dropzone-text">
-          <h3>לחץ להעלאת קובץ שמע</h3>
+          <h3>גרור קבצים לכאן או לחץ להעלאה</h3>
           <p>MP3, WAV, M4A, FLAC נתמכים</p>
         </div>
         <button class="dropzone-folder-btn" onclick="event.stopPropagation(); triggerFolderUpload()">
-          <i data-lucide="folder-open" size="14"></i> העלה תיקייה
+          <i data-lucide="folder-up" size="18"></i> העלאת תיקייה
         </button>
         <input type="file" id="fileInput" accept="audio/*" multiple style="display:none">
         <input type="file" id="folderInput" accept="audio/*" webkitdirectory multiple style="display:none">
@@ -842,7 +947,21 @@
 <script>
   const API    = "http://localhost:8000";
   const WS_URL = "ws://localhost:8000/ws/live";
-  
+
+  const LANG_LABELS = {
+    he: 'עברית', en: 'אנגלית', ar: 'ערבית', ru: 'רוסית',
+    es: 'ספרדית', fr: 'צרפתית', de: 'גרמנית', it: 'איטלקית',
+    pt: 'פורטוגזית', zh: 'סינית', ja: 'יפנית', ko: 'קוריאנית'
+  };
+  const RTL_LANGS = new Set(['he', 'ar']);
+
+  const PLACEHOLDERS = {
+    he: 'הקשר (שמות, מונחים)', en: 'Context (names, terms)', ar: 'سياق (أسماء، مصطلحات)',
+    ru: 'Контекст (имена, термины)', es: 'Contexto (nombres, términos)', fr: 'Contexte (noms, termes)',
+    de: 'Kontext (Namen, Begriffe)', it: 'Contesto (nomi, termini)', pt: 'Contexto (nomes, termos)',
+    zh: '语境 (名称、术语)', ja: '文脈 (名前、用語)', ko: '문맥 (이름, 용어)'
+  };
+
   let historyData = [];
   let isRecording = false;
   let isPaused = false;
@@ -883,16 +1002,22 @@
 
   function _applyLanguageToggle(lang) {
     const txt = document.getElementById('currentLangText');
-    if (txt) txt.textContent = lang === 'he' ? 'עברית' : 'אנגלית';
+    if (txt) txt.textContent = LANG_LABELS[lang] || lang;
+    const isRTL = RTL_LANGS.has(lang);
     const prompt = document.getElementById('promptInput');
     if (prompt) {
-      if (lang === 'en') {
-        prompt.style.direction = 'ltr';
-        prompt.placeholder = 'Initial prompt (optional) — names, terms, context...';
-      } else {
-        prompt.style.direction = 'rtl';
-        prompt.placeholder = 'רמז ראשוני (אופציונלי) — שמות, מונחים, הקשר...';
+      prompt.style.direction = isRTL ? 'rtl' : 'ltr';
+      prompt.style.paddingRight = isRTL ? '2.85rem' : '1.25rem';
+      prompt.style.paddingLeft = isRTL ? '1.25rem' : '2.85rem';
+      
+      const icon = document.querySelector('.prompt-icon');
+      if (icon) {
+        icon.style.right = isRTL ? '1.125rem' : 'auto';
+        icon.style.left = isRTL ? 'auto' : '1.125rem';
       }
+
+      const nativeHint = PLACEHOLDERS[lang] || PLACEHOLDERS['en'];
+      prompt.placeholder = `הקשר לתמלול | ${nativeHint}`;
     }
   }
 
@@ -902,7 +1027,12 @@
       const dot = document.getElementById('dot');
       const text = document.getElementById('healthText');
       dot.className = d.status === "ok" ? "status-dot ok" : "status-dot err";
-      text.textContent = d.status === "ok" ? `מנוע פעיל: ${d.device}` : "שגיאת מנוע";
+      if (d.status === "ok") {
+        const modelShort = d.model ? d.model.split('/').pop() : null;
+        text.textContent = modelShort ? `${d.device} · ${modelShort}` : `מנוע פעיל: ${d.device}`;
+      } else {
+        text.textContent = "שגיאת מנוע";
+      }
     } catch {
       document.getElementById('dot').className = "status-dot err";
       document.getElementById('healthText').textContent = "המנוע לא זמין";
@@ -1014,8 +1144,8 @@
     document.getElementById('wsModeTitle').textContent = title;
     const wsResult = document.getElementById('wsResult');
     wsResult.innerHTML = "";
-    wsResult.style.direction = selectedLanguage === 'en' ? 'ltr' : 'rtl';
-    wsResult.style.textAlign = selectedLanguage === 'en' ? 'left' : 'right';
+    wsResult.style.direction = RTL_LANGS.has(selectedLanguage) ? 'rtl' : 'ltr';
+    wsResult.style.textAlign = RTL_LANGS.has(selectedLanguage) ? 'right' : 'left';
     document.getElementById('wsStatusText').textContent = "";
     document.getElementById('btnStop').disabled = false;
     document.getElementById('btnStop').style.opacity = "1";
@@ -1107,6 +1237,8 @@
           if (!line.startsWith("data: ")) continue;
           let d; try { d = JSON.parse(line.slice(6)); } catch { continue; }
           if (d.error) throw new Error(d.error);
+          // Final event carries the agent post-processed full text — use it for the library entry
+          if (d.final_text !== undefined) { fullText = d.final_text.trim() || fullText; continue; }
           if (d.text?.trim()) {
             const chunk = d.text.trim();
             fullText += (fullText ? " " : "") + chunk;
@@ -1399,8 +1531,8 @@
     renderDisplayText(item, div.querySelector(`#display-${item.id}`));
     div.querySelector(`#edit-${item.id}`).value = item.text;
 
-    // Apply LTR direction for English items
-    if (item.language === 'en') {
+    // Apply text direction based on language
+    if (!RTL_LANGS.has(item.language || 'he')) {
       div.querySelector(`#display-${item.id}`).style.direction = 'ltr';
       div.querySelector(`#display-${item.id}`).style.textAlign = 'left';
       div.querySelector(`#edit-${item.id}`).style.direction = 'ltr';
