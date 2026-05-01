@@ -28,15 +28,15 @@ def help():
 Local Speech-to-Text — command reference
 ─────────────────────────────────────────
 
-  stt-file <audio>  [options]        Transcribe an audio file (offline)
-  stt-live          [options]        Live microphone or file streaming
-  stt-server        [options]        Start the web UI + REST/WebSocket server
-  stt-benchmark     [options]        Measure hardware and pick the best backend
-  stt-help                           Show this message
+  visper-file <audio>  [options]        Transcribe an audio file (offline)
+  visper-live          [options]        Live microphone or file streaming
+  visper-server        [options]        Start the web UI + REST/WebSocket server
+  visper-benchmark     [options]        Measure hardware and pick the best backend
+  visper-help                           Show this message
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-stt-file <audio> [<audio2> ...]
+visper-file <audio> [<audio2> ...]
   Transcribes one or more audio files and writes a text file next to each.
   Pass multiple files or a glob (*.wav) for batch mode.
 
@@ -53,14 +53,14 @@ stt-file <audio> [<audio2> ...]
   --background                 Detach from terminal (silences stdout on Windows)
 
   Examples:
-    stt-file meeting.mp3
-    stt-file lecture.wav --output srt --language en
-    stt-file audio.mp3 --prompt "team standup, participants: Yossi, Rachel"
-    stt-file *.wav --output json
+    visper-file meeting.mp3
+    visper-file lecture.wav --output srt --language en
+    visper-file audio.mp3 --prompt "team standup, participants: Yossi, Rachel"
+    visper-file *.wav --output json
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-stt-live
+visper-live
   Real-time transcription from the microphone, or streamed from a file.
   Press Ctrl+C to stop. Final accumulated text is printed/saved/clipped.
 
@@ -74,13 +74,13 @@ stt-live
   --background                 Detach from terminal
 
   Examples:
-    stt-live
-    stt-live --language en --prompt "quarterly review, speaker: John"
-    stt-live --file interview.mp3 --output transcript.txt
+    visper-live
+    visper-live --language en --prompt "quarterly review, speaker: John"
+    visper-live --file interview.mp3 --output transcript.txt
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-stt-server
+visper-server
   Starts the web UI and REST/WebSocket API on http://localhost:8000.
   Also launchable by double-clicking start.bat on Windows.
 
@@ -102,7 +102,7 @@ stt-server
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-stt-benchmark
+visper-benchmark
   Measures your hardware once and writes benchmark_results.json.
   Runs automatically on first install. Re-run if you change hardware.
 

@@ -88,4 +88,4 @@ echo.
 
 start /b cmd /c "timeout /t 3 /nobreak >nul && start http://localhost:8000"
 
-stt-server
+visper-server

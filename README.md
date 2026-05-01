@@ -14,7 +14,7 @@ Supports Hebrew, English, Arabic, Russian, and other languages — each routed t
 
 Then:
 
-1. Download this repo ([ZIP](https://github.com/Avrhambi/local-whisper-he/archive/refs/heads/master.zip)) and extract it
+1. Download this repo ([ZIP](https://github.com/Avrhambi/visper/archive/refs/heads/master.zip)) and extract it
 2. Double-click **`start.bat`**
 
 That's it. On first run it installs all dependencies, downloads the model (~1.5 GB, one time), runs the hardware benchmark, and opens the web UI at `http://localhost:8000` in your browser. Every run after that starts in a few seconds.
@@ -26,10 +26,10 @@ To get the latest version: double-click **`update.bat`**.
 ### Developers
 
 ```bash
-git clone https://github.com/Avrhambi/local-stt-he && cd local-stt-he
+git clone https://github.com/Avrhambi/visper && cd visper
 python install.py           # installs deps, downloads model (~1.5 GB once), runs benchmark
-stt-server                  # web UI at http://localhost:8000
-stt-file audio.mp3          # or use the CLI directly
+visper-server                  # web UI at http://localhost:8000
+visper-file audio.mp3          # or use the CLI directly
 ```
 
 Requires Python 3.10+ and [ffmpeg](https://ffmpeg.org) on PATH (WAV files work without it).
@@ -49,7 +49,7 @@ Language routing selects the right model per request: Hebrew fine-tune (`ivrit-a
 ## Web UI
 
 ```bash
-stt-server          # starts on http://localhost:8000
+visper-server          # starts on http://localhost:8000
 ```
 
 Or double-click `start.bat` — it starts the server and opens the browser automatically.
@@ -67,18 +67,18 @@ Or double-click `start.bat` — it starts the server and opens the browser autom
 
 ## CLI
 
-### Offline file transcription — `stt-file`
+### Offline file transcription — `visper-file`
 
 ```bash
-stt-file audio.mp3                                      # transcribe → write audio.txt
-stt-file audio.wav --output srt                         # SRT subtitles
-stt-file audio.mp3 --output vtt                         # WebVTT subtitles
-stt-file audio.mp3 --output json                        # JSON with segments, RTF, config
-stt-file audio.mp3 --no-file --clip                     # print + copy to clipboard, no file written
-stt-file audio.mp3 --progress                           # print each segment as it is decoded
-stt-file audio.mp3 --language en                        # transcribe English
-stt-file audio.mp3 --prompt "team meeting, participants: Yossi, Rachel"  # initial prompt
-stt-file *.wav                                          # batch mode — all WAV files in current dir
+visper-file audio.mp3                                      # transcribe → write audio.txt
+visper-file audio.wav --output srt                         # SRT subtitles
+visper-file audio.mp3 --output vtt                         # WebVTT subtitles
+visper-file audio.mp3 --output json                        # JSON with segments, RTF, config
+visper-file audio.mp3 --no-file --clip                     # print + copy to clipboard, no file written
+visper-file audio.mp3 --progress                           # print each segment as it is decoded
+visper-file audio.mp3 --language en                        # transcribe English
+visper-file audio.mp3 --prompt "team meeting, participants: Yossi, Rachel"  # initial prompt
+visper-file *.wav                                          # batch mode — all WAV files in current dir
 ```
 
 | Flag | Default | Description |
@@ -94,16 +94,16 @@ stt-file *.wav                                          # batch mode — all WAV
 | `--profile` | from config | Override resource profile: `foreground` / `background` / `minimal` |
 | `--background` | off | Detach from terminal (Windows: silences stdout) |
 
-### Live / microphone — `stt-live`
+### Live / microphone — `visper-live`
 
 ```bash
-stt-live                                                # microphone transcription
-stt-live --file audio.mp3                               # file streaming mode
-stt-live --output result.txt                            # save accumulated transcript on stop
-stt-live --clip                                         # copy to clipboard on Ctrl+C
-stt-live --progress                                     # print each segment with timestamp
-stt-live --language en                                  # transcribe English
-stt-live --prompt "dev team standup, participants: Yossi, Rachel"  # initial prompt
+visper-live                                                # microphone transcription
+visper-live --file audio.mp3                               # file streaming mode
+visper-live --output result.txt                            # save accumulated transcript on stop
+visper-live --clip                                         # copy to clipboard on Ctrl+C
+visper-live --progress                                     # print each segment with timestamp
+visper-live --language en                                  # transcribe English
+visper-live --prompt "dev team standup, participants: Yossi, Rachel"  # initial prompt
 ```
 
 | Flag | Default | Description |
@@ -117,10 +117,10 @@ stt-live --prompt "dev team standup, participants: Yossi, Rachel"  # initial pro
 | `--accuracy` | from config | Override accuracy tier for the session |
 | `--background` | off | Detach from terminal |
 
-### Web server — `stt-server`
+### Web server — `visper-server`
 
 ```bash
-stt-server                                              # starts on http://localhost:8000
+visper-server                                              # starts on http://localhost:8000
 ```
 
 The server exposes a full web UI and a REST/WebSocket API.
@@ -227,11 +227,11 @@ Full reference with all options is in `config.yaml`.
 The benchmark runs automatically on first `install.py`. To re-run:
 
 ```bash
-stt-benchmark                  # smart mode — all candidates, accurate RTF (~3–5 min)
-stt-benchmark --fast           # primary device only (~60s)
-stt-benchmark --quick          # heuristic only, no inference (instant)
-stt-benchmark --force          # re-run even if results exist
-stt-help                       # full command reference for all stt-* commands
+visper-benchmark                  # smart mode — all candidates, accurate RTF (~3–5 min)
+visper-benchmark --fast           # primary device only (~60s)
+visper-benchmark --quick          # heuristic only, no inference (instant)
+visper-benchmark --force          # re-run even if results exist
+visper-help                       # full command reference for all visper-* commands
 ```
 
 **Fallback chain:** If the primary device fails at runtime (OOM, driver crash), the engine automatically tries the next device: `CUDA → OpenVINO HETERO (iGPU+CPU) → OpenVINO iGPU → OpenVINO CPU → CT2 CPU`. Each fallback's RTF is measured and cached on first use.
@@ -258,7 +258,7 @@ RTF budget = 0.85 (1.0 = real-time). WER = 0.179, CER = 0.084 on 221 Hebrew file
 start.bat                    ← Windows launcher: setup + server + browser (double-click)
 update.bat                   ← Windows updater: git pull + pip install (double-click)
 install.py                   ← first-run setup: installs deps, downloads model, runs benchmark
-web/index.html               ← web UI (served by stt-server)
+web/index.html               ← web UI (served by visper-server)
 local_stt_he/benchmark.py    ← hardware detection, candidate selection, fallback chain
 local_stt_he/resource.py     ← resource profile enforcement (threads, GPU, VRAM guard, priority)
 local_stt_he/params.py       ← Whisper parameter selection per bucket/tier

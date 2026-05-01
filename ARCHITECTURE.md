@@ -31,9 +31,9 @@ TranscriptResult {text, segments, rtf, tier_used, ...}
         ▼
 local_stt_he/api.py: transcribe() / stream_transcribe() / transcribe_chunked()
         │
-        ├── transcribe_file.py  (CLI: stt-file)
-        ├── transcribe_live.py  (CLI: stt-live)
-        └── server.py           (FastAPI: stt-server)
+        ├── transcribe_file.py  (CLI: visper-file)
+        ├── transcribe_live.py  (CLI: visper-live)
+        └── server.py           (FastAPI: visper-server)
 ```
 
 ---

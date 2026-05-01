@@ -3,7 +3,7 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "local-stt-he"
+name = "visper"
 version = "0.2.0"
 description = "Hebrew speech-to-text transcription engine"
 requires-python = ">=3.10"
@@ -32,11 +32,11 @@ server = [
 ]
 
 [project.scripts]
-stt-file      = "local_stt_he._cli:file"
-stt-live      = "local_stt_he._cli:live"
-stt-benchmark = "local_stt_he._cli:benchmark"
-stt-server    = "local_stt_he.server:main"
-stt-help      = "local_stt_he._cli:help"
+visper-file      = "local_stt_he._cli:file"
+visper-live      = "local_stt_he._cli:live"
+visper-benchmark = "local_stt_he._cli:benchmark"
+visper-server    = "local_stt_he.server:main"
+visper-help      = "local_stt_he._cli:help"
 
 [tool.setuptools.packages.find]
 where = ["."]

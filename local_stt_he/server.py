@@ -2,7 +2,7 @@
 FastAPI server for Hebrew STT.
 
 Install:  pip install -e ".[server]"
-Run:      stt-server   (or: python server.py)
+Run:      visper-server   (or: python server.py)
 
 Endpoints
 ---------

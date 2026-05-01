@@ -17,7 +17,7 @@ if errorlevel 1 (
     echo    https://git-scm.com/download/win
     echo.
     echo  Option B — Download the latest ZIP directly from GitHub:
-    echo    https://github.com/Avrhambi/local-whisper-he/archive/refs/heads/master.zip
+    echo    https://github.com/Avrhambi/visper/archive/refs/heads/master.zip
     echo    Extract it over your current folder, then run start.bat.
     echo.
     pause
