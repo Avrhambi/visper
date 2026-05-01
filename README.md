@@ -231,6 +231,7 @@ stt-benchmark                  # smart mode — all candidates, accurate RTF (~3
 stt-benchmark --fast           # primary device only (~60s)
 stt-benchmark --quick          # heuristic only, no inference (instant)
 stt-benchmark --force          # re-run even if results exist
+stt-help                       # full command reference for all stt-* commands
 ```
 
 **Fallback chain:** If the primary device fails at runtime (OOM, driver crash), the engine automatically tries the next device: `CUDA → OpenVINO HETERO (iGPU+CPU) → OpenVINO iGPU → OpenVINO CPU → CT2 CPU`. Each fallback's RTF is measured and cached on first use.

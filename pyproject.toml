@@ -36,6 +36,7 @@ stt-file      = "local_stt_he._cli:file"
 stt-live      = "local_stt_he._cli:live"
 stt-benchmark = "local_stt_he._cli:benchmark"
 stt-server    = "local_stt_he.server:main"
+stt-help      = "local_stt_he._cli:help"
 
 [tool.setuptools.packages.find]
 where = ["."]
