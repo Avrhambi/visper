@@ -11,7 +11,17 @@ model_id: "ivrit-ai/whisper-large-v3-turbo-ct2"
 # Set to true to run noise reduction on audio before transcription.
 # Improves accuracy on recordings with background noise (fan, AC, crowd).
 # Adds ~1s of processing time per file. Requires noisereduce package.
-audio_denoise: false
+audio_denoise: true
+
+# Set to true to apply a high-pass filter at 80 Hz before transcription.
+# Removes HVAC rumble, mic handling noise, and table thumps that Whisper
+# sometimes interprets as speech onsets. Pure numpy/scipy, zero quality cost.
+audio_highpass: true
+
+# Set to true to normalize audio volume before transcription.
+# Amplifies quiet recordings (whispered speech, far microphone) to a standard loudness.
+# Combine with audio_denoise: true for best results on very quiet audio.
+audio_normalize: true
 
 # ══ BASIC ════════════════════════════════════════════════════════════════════
 # These are the only settings most users ever need to change.
@@ -52,7 +62,7 @@ overlap_seconds: 2.0            # Sliding window overlap between chunks. Improve
 
 # ── VAD ──────────────────────────────────────────────────────────────────────
 vad_filter: true
-vad_min_silence_ms: 300
+vad_min_silence_ms: 500
 vad_speech_pad_ms: 200
 noise_calibration_seconds: 1.5  # 0 = disable. Records ambient noise at session start to set VAD threshold.
 
@@ -66,7 +76,7 @@ print_to_stdout: true
 # Re-run at next accuracy tier if avg log-prob below threshold.
 # Enabled by default when accuracy_mode resolves to "accurate" tier.
 # Set to false to always disable, true to always enable.
-confidence_retry_enabled: false
+confidence_retry_enabled: null  # null = auto (enables when accurate tier is selected)
 
 # ── Manual parameter overrides ────────────────────────────────────────────────
 manual_params:
@@ -103,6 +113,24 @@ force_cpu_threads: 0          # 0 = use benchmark result
 # Set skip_benchmark: true together with force_device + force_compute_type to
 # bypass the benchmark entirely — no benchmark_results.json needed.
 skip_benchmark: false
+
+# ══ MULTI-LANGUAGE MODEL ROUTING ═════════════════════════════════════════════
+# Model used is selected automatically based on the transcription language.
+# Only the active model is kept in memory — others are loaded on first use.
+# Override specific languages or add new ones here. Remove a key to use _default.
+models:
+  he: ivrit-ai/whisper-large-v3-turbo-ct2      # Hebrew fine-tune — best Hebrew quality
+  en: distil-whisper/distil-large-v3-ct2       # English-only distil — ~6x faster than turbo
+  ar: Systran/faster-whisper-large-v3          # Full v3 — turbo degrades on Arabic
+  _default: Systran/faster-whisper-large-v3         # Russian, Spanish, French, German, CJK, etc.
+
+# Leave blank to use language-based routing above.
+# Set to a model ID to force one model for all languages (useful for code-switching).
+force_model: ""
+
+# Hotwords: comma-separated list of words/phrases to bias Whisper toward.
+# Use for domain-specific terms, proper nouns, or brand names Whisper mishears.
+hotwords: ""
 
 # ── iGPU preference ───────────────────────────────────────────────────────────
 # If Intel iGPU (OpenVINO) RTF is within this margin of the benchmark winner,
