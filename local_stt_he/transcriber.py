@@ -1,9 +1,9 @@
 """
-core/transcriber.py
+local_stt_he/transcriber.py
 -------------------
 Unified transcription engine. Accepts a config dict from benchmark.get_best_config().
 Dispatches to faster-whisper (CPU/CUDA) or openvino_genai backend.
-Whisper parameters are resolved per-call via core.params.
+Whisper parameters are resolved per-call via local_stt_he/params.py.
 """
 from __future__ import annotations
 

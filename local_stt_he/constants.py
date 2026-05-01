@@ -1,4 +1,4 @@
-# core/constants.py
+# local_stt_he/constants.py
 # Audio pipeline constants only — no hardware config here.
 
 SAMPLE_RATE = 16_000

@@ -1,5 +1,5 @@
 """
-core/params.py
+local_stt_he/params.py
 --------------
 Single owner of all Whisper inference parameter decisions.
 No other module sets beam_size, temperature, condition_on_prev_text, etc.
