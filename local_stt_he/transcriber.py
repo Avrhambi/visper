@@ -21,7 +21,7 @@ from typing import Callable, Optional, Union
 import numpy as np
 
 ROOT = Path(__file__).parent.parent
-MODEL_ID = "ivrit-ai/whisper-large-v3-turbo-ct2"
+_FALLBACK_MODEL_ID = "ivrit-ai/whisper-large-v3-turbo-ct2"
 OV_MODEL_DIR = "models_ov/whisper-large-v3-turbo-ov"
 
 
@@ -66,6 +66,9 @@ class Transcriber:
         self._vad_min_silence_ms = 300
         self._vad_speech_pad_ms = 200
         self._denoise = False
+        self._normalize_volume = False
+        self._highpass = False
+        self._hotwords: str = ""
         try:
             import yaml as _yaml
             _cfg_path = ROOT / "config.yaml"
@@ -76,8 +79,12 @@ class Transcriber:
                 self._vad_min_silence_ms = _ucfg.get("vad_min_silence_ms", 300)
                 self._vad_speech_pad_ms = _ucfg.get("vad_speech_pad_ms", 200)
                 self._denoise = _ucfg.get("audio_denoise", False)
+                self._normalize_volume = _ucfg.get("audio_normalize", False)
+                self._highpass = _ucfg.get("audio_highpass", False)
+                self._hotwords = _ucfg.get("hotwords", "") or ""
         except Exception:
             pass
+        self._model_id = config.get("model_id", _FALLBACK_MODEL_ID)
         self._backend_type = config["device"]
         self._config_label = self._make_label(config)
         self._first_call = True
@@ -98,7 +105,7 @@ class Transcriber:
             self._load_direct(config)
 
     def _load_direct(self, config: dict) -> None:
-        print(f"[Transcriber] Loading model: {MODEL_ID} ({self._config_label})...", file=sys.stderr)
+        print(f"[Transcriber] Loading model: {self._model_id} ({self._config_label})...", file=sys.stderr)
         t0 = time.time()
         try:
             self._backend = self._load_backend(config)
@@ -161,7 +168,7 @@ class Transcriber:
             return None
 
         worker_script = Path(__file__).parent / "worker.py"
-        worker_config = {**self._config, "model_id": MODEL_ID, "root": str(ROOT)}
+        worker_config = {**self._config, "model_id": self._model_id, "root": str(ROOT)}
 
         print(f"[Transcriber] Spawning venv worker ({self._config_label})...", file=sys.stderr)
         t0 = time.time()
@@ -203,7 +210,7 @@ class Transcriber:
         if device in ("cpu", "cuda"):
             from faster_whisper import WhisperModel
             return WhisperModel(
-                MODEL_ID,
+                self._model_id,
                 device=device,
                 compute_type=config["compute_type"],
                 cpu_threads=config.get("cpu_threads", 4),
@@ -280,16 +287,23 @@ class Transcriber:
             audio = self._resolve_source(source)
             audio_duration = len(audio) / 16000.0 if isinstance(audio, np.ndarray) else self._get_duration(source)
 
-            if self._denoise and bucket != "streaming":
+            if (self._denoise or self._normalize_volume or self._highpass) and bucket != "streaming":
                 if not isinstance(audio, np.ndarray):
                     audio = self._to_array(source)
-                audio = self._denoise_audio(audio)
+                if self._normalize_volume:
+                    audio = self._normalize_audio_volume(audio)
+                if self._highpass:
+                    audio = self._highpass_filter(audio)
+                if self._denoise:
+                    audio = self._denoise_audio(audio)
                 audio_duration = len(audio) / 16000.0
 
             kwargs = params.as_transcribe_kwargs()
             kwargs["language"] = _lang
             if initial_prompt:
                 kwargs["initial_prompt"] = initial_prompt
+            if self._hotwords:
+                kwargs["hotwords"] = self._hotwords
             kwargs["vad_filter"] = vad_filter
             kwargs["vad_parameters"] = dict(
                 min_silence_duration_ms=vad_min_silence_ms,
@@ -488,6 +502,22 @@ class Transcriber:
             import librosa
             audio = librosa.resample(audio, orig_sr=sr, target_sr=16000)
         return audio
+
+    def _highpass_filter(self, audio: np.ndarray, cutoff_hz: float = 80.0) -> np.ndarray:
+        try:
+            from scipy.signal import butter, filtfilt
+            nyq = 16000 / 2.0
+            b, a = butter(4, cutoff_hz / nyq, btype='high')
+            return filtfilt(b, a, audio).astype(np.float32)
+        except Exception:
+            return audio
+
+    def _normalize_audio_volume(self, audio: np.ndarray, target_rms: float = 0.05) -> np.ndarray:
+        rms = float(np.sqrt(np.mean(audio ** 2)))
+        if rms < 1e-8:
+            return audio
+        gain = min(target_rms / rms, 10.0)  # cap at 10× to avoid amplifying pure noise
+        return np.clip(audio * gain, -1.0, 1.0).astype(np.float32)
 
     def _denoise_audio(self, audio: np.ndarray) -> np.ndarray:
         try:
