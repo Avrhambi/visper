@@ -229,14 +229,14 @@ def main():
         _r._load_user_config = lambda: _override
 
     from local_stt_he.benchmark import get_best_config
-    from local_stt_he.transcriber import Transcriber
+    from local_stt_he.model_router import ModelRouter
 
     first_path = Path(args.files[0])
     first_bucket = _resolve_bucket(first_path, args.bucket)
     config = get_best_config(first_bucket)
 
     print("[STT] Loading model...", file=sys.stderr)
-    engine = Transcriber(config)
+    engine = ModelRouter(config).get(args.language)
 
     batch = len(args.files) > 1
     batch_start = time.time()

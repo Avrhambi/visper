@@ -674,6 +674,19 @@
     .icon-btn.danger:hover { color: var(--danger); }
     .icon-btn i { width: 18px; height: 18px; stroke-width: 1.5; }
 
+    .lang-tag {
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: var(--border-light);
+      color: var(--text-muted);
+      margin-right: 8px;
+      text-transform: uppercase;
+      vertical-align: middle;
+      display: inline-block;
+    }
+
     /* ── VAD Meter ── */
     .vad-meter {
       height: 4px; background: #F3F4F6;
@@ -920,8 +933,8 @@
           <i data-lucide="text-cursor-input" class="prompt-icon" size="18"></i>
           <textarea id="promptInput" class="prompt-input"
                  placeholder=
-                  "(אופציונלי) הוסיפו הקשר להקלטה — שמות, מונחים או נושא ההקלטה(מקס' 40 מילים)       לדוגמא: ישיבת צוות פיתוח. משתתפים: יוסי, רחל, אבי. נושאים:גיוס מפתחים."
-                  
+                  "(אופציונלי) הוסיפו הקשר —  באותה שפה של ההקלטה (מקס' 55 תווים).                 לדוגמא: ישיבת צוות פיתוח. משתתפים: יוסי, רחל, אבי. נושאים:גיוס מפתחים."
+                 maxlength="55"
                  oninput="validatePrompt(this)"></textarea>
         </div>
       </div>
@@ -1071,6 +1084,29 @@
   function _applyLanguageToggle(lang) {
     const txt = document.getElementById('currentLangText');
     if (txt) txt.textContent = LANG_LABELS[lang] || lang;
+
+    const isRtl = RTL_LANGS.has(lang);
+    const promptInput = document.getElementById('promptInput');
+    const promptIcon = document.querySelector('.prompt-icon');
+    const wsResult = document.getElementById('wsResult');
+
+    if (promptInput) {
+      promptInput.style.direction = isRtl ? 'rtl' : 'ltr';
+      promptInput.style.textAlign = isRtl ? 'right' : 'left';
+      // Adjust padding based on icon position
+      promptInput.style.paddingRight = isRtl ? '2.85rem' : '1.25rem';
+      promptInput.style.paddingLeft = isRtl ? '1.25rem' : '2.85rem';
+    }
+
+    if (promptIcon) {
+      promptIcon.style.right = isRtl ? '1.125rem' : 'auto';
+      promptIcon.style.left = isRtl ? 'auto' : '1.125rem';
+    }
+
+    if (wsResult) {
+      wsResult.style.direction = isRtl ? 'rtl' : 'ltr';
+      wsResult.style.textAlign = isRtl ? 'right' : 'left';
+    }
   }
 
   function validatePrompt(el) {
@@ -1623,7 +1659,10 @@
         <div class="lib-title-group">
           <i data-lucide="${item.type === 'live' ? 'mic' : 'file-audio'}" class="lib-icon" stroke-width="1.5"></i>
           <div>
-            <div class="lib-title">${item.title}</div>
+            <div class="lib-title">
+              ${item.title}
+              <span class="lang-tag">${LANG_LABELS[item.language] || item.language}</span>
+            </div>
             <div class="lib-meta">${item.date}</div>
           </div>
         </div>
@@ -1671,12 +1710,14 @@
     div.querySelector(`#edit-${item.id}`).value = item.text;
 
     // Apply text direction based on language
-    if (!RTL_LANGS.has(item.language || 'he')) {
-      div.querySelector(`#display-${item.id}`).style.direction = 'ltr';
-      div.querySelector(`#display-${item.id}`).style.textAlign = 'left';
-      div.querySelector(`#edit-${item.id}`).style.direction = 'ltr';
-      div.querySelector(`#edit-${item.id}`).style.textAlign = 'left';
-    }
+    const isRtl = RTL_LANGS.has(item.language || 'he');
+    const displayEl = div.querySelector(`#display-${item.id}`);
+    const editEl = div.querySelector(`#edit-${item.id}`);
+    
+    displayEl.style.direction = isRtl ? 'rtl' : 'ltr';
+    displayEl.style.textAlign = isRtl ? 'right' : 'left';
+    editEl.style.direction = isRtl ? 'rtl' : 'ltr';
+    editEl.style.textAlign = isRtl ? 'right' : 'left';
 
     // Click-to-seek: attach timeupdate listener if segments + audio are present
     if (item.segments?.length && item.audioUrl) {
