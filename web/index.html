@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>וִויסְפֶּר - תמלול בעברית </title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='2' y='2' width='20' height='20' rx='5' fill='%232563EB'/><rect x='6' y='10' width='3' height='4' rx='1' fill='white'/><rect x='10.5' y='6' width='3' height='12' rx='1' fill='white'/><rect x='15' y='8' width='3' height='8' rx='1' fill='white'/></svg>">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='2' y='2' width='20' height='20' rx='5' fill='%231A1A1A'/><rect x='6' y='10' width='3' height='4' rx='1' fill='white'/><rect x='10.5' y='6' width='3' height='12' rx='1' fill='white'/><rect x='15' y='8' width='3' height='8' rx='1' fill='white'/></svg>">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -90,33 +90,33 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 0.75rem 0 1rem;
+      padding: 0.5rem 0 0.75rem;
       flex-shrink: 0;
       transition: var(--transition);
-      gap: 0.5rem;
+      gap: 0.25rem;
     }
     header h1 {
-      font-size: 2rem;
+      font-size: 1.75rem;
       font-weight: 800;
       letter-spacing: -0.04em;
       display: flex;
       align-items: center;
-      gap: 20px;
+      gap: 16px;
       color: #111827;
       margin: 0;
-      padding-right: 5rem; /* Nudge left to balance RTL text weight */
+      padding-right: 4rem; /* Nudge left to balance RTL text weight */
     }
     header h1 i,
     header h1 svg {
-      stroke: #2563EB !important;
-      color: #2563EB !important;
-      width: 48px;
-      height: 48px;
+      stroke: var(--text) !important;
+      color: var(--text) !important;
+      width: 40px;
+      height: 40px;
       stroke-width: 3px;
       flex-shrink: 0;
     }
     header h3 {
-      font-size: 1.0625rem;
+      font-size: 0.9375rem;
       font-weight: 500;
       color: var(--text-muted);
       letter-spacing: -0.01em;
@@ -128,7 +128,7 @@
     .nav-container {
       display: flex;
       justify-content: center;
-      margin-bottom: 1.25rem;
+      margin-bottom: 0.75rem;
       flex-shrink: 0;
     }
     .nav-tabs {
@@ -181,7 +181,7 @@
     .toggle-container {
       display: flex;
       justify-content: center;
-      margin-bottom: 2rem;
+      margin-bottom: 1.25rem;
     }
     .segmented-control {
       background: #F3F4F6;
@@ -226,7 +226,7 @@
       padding: 2.5rem 2rem 2rem;
       box-shadow: var(--shadow-xl);
       text-align: center;
-      min-height: 480px;
+      min-height: 460px;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -236,8 +236,8 @@
     }
 
     .dropzone {
-      width: 92%;
-      height: 90%;
+      width: 94%;
+      flex: 1;
       border: 2px dashed var(--border);
       background: #FAFAFA;
       border-radius: var(--radius-xl);
@@ -249,7 +249,7 @@
       cursor: pointer;
       transition: var(--transition);
       padding: 2.5rem;
-      margin: auto;
+      margin: 0 auto;
     }
     .dropzone:hover {
       background: #F3F4F6;
@@ -267,68 +267,131 @@
     .dropzone-text h3 { font-size: 1.25rem; font-weight: 700; margin-bottom: 0.25rem; }
     .dropzone-text p { font-size: 0.8125rem; color: var(--text-muted); font-weight: 500; }
 
-    /* ── File Chip & Action ── */
-    .file-selection {
+    /* ── File Preview (Gemini-style) ── */
+    .file-preview-area {
       display: none;
       flex-direction: column;
-      align-items: center;
-      gap: 2rem;
+      gap: 1.5rem;
       width: 100%;
+      margin-top: 1rem;
     }
-    .file-chip {
+    .file-preview-list {
+      display: flex;
+      gap: 0.75rem;
+      overflow-x: auto;
+      padding: 0.5rem 0.25rem 0.5rem;
+      width: 100%;
+      scrollbar-width: thin;
+      -webkit-overflow-scrolling: touch;
+    }
+    .file-preview-list::-webkit-scrollbar {
+      height: 3px;
+    }
+
+    .file-preview-item {
+      min-width: 110px;
+      max-width: 110px;
+      height: 125px;
       background: #F9FAFB;
       border: 1px solid var(--border);
-      padding: 0.75rem 1.5rem;
-      border-radius: 999px;
+      border-radius: var(--radius-lg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      position: relative;
+      flex-shrink: 0;
+      transition: var(--transition);
+      padding: 0.5rem;
+      cursor: default;
+    }
+    .file-preview-icon {
+      color: var(--text);
+      background: #F3F4F6;
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
       display: flex;
       align-items: center;
-      gap: 12px;
-      font-size: 0.875rem;
+      justify-content: center;
+    }
+    .file-preview-name {
+      font-size: 0.75rem;
       font-weight: 600;
-      box-shadow: var(--shadow-sm);
-    }
-    .file-chip-remove {
-      color: var(--text-muted);
-      cursor: pointer;
-      transition: var(--transition);
-    }
-    .file-chip-remove:hover { color: var(--danger); }
-
-    /* ── Batch Queue Panel ── */
-    .batch-panel { display: none; flex-direction: column; gap: 0.75rem; width: 100%; padding: 0.25rem 0; }
-    .batch-header { display: flex; justify-content: space-between; align-items: center; }
-    .batch-header-label { font-size: 0.875rem; font-weight: 600; color: var(--text); }
-    .batch-clear { background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 0.8125rem; padding: 0.25rem 0.5rem; border-radius: var(--radius-md); transition: var(--transition); }
-    .batch-clear:hover { color: var(--danger); background: #FEE2E2; }
-    .batch-list { display: flex; flex-direction: column; gap: 0.25rem; max-height: 180px; overflow-y: auto; }
-    .batch-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.75rem; background: var(--bg); border-radius: var(--radius-md); font-size: 0.8125rem; }
-    .batch-filename { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: ltr; text-align: left; color: var(--text); }
-    .batch-status { font-size: 0.75rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 999px; white-space: nowrap; flex-shrink: 0; }
-    .batch-status.queued     { background: #F3F4F6; color: var(--text-muted); }
-    .batch-status.processing { background: #DBEAFE; color: #1D4ED8; }
-    .batch-status.done       { background: #D1FAE5; color: #065F46; }
-    .batch-status.error      { background: #FEE2E2; color: #991B1B; }
-    .dropzone-folder-btn {
-      background: white;
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      padding: 0.6rem 1.5rem;
-      font-size: 0.875rem;
-      font-weight: 600;
-      color: var(--text-muted);
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      transition: var(--transition);
-      margin-top: 0.5rem;
-      box-shadow: var(--shadow-sm);
-    }
-    .dropzone-folder-btn:hover {
       color: var(--text);
-      border-color: var(--border);
-      transform: translateY(-1px);
-      box-shadow: var(--shadow-md);
+      width: 100%;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      direction: ltr;
+      padding: 0 0.5rem;
+    }
+
+    .file-preview-remove {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      width: 22px;
+      height: 22px;
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text);
+      transition: var(--transition);
+      box-shadow: var(--shadow-sm);
+      z-index: 10;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .file-preview-item:hover .file-preview-remove {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .file-preview-remove:hover {
+      background: #F3F4F6;
+      border-color: var(--text);
+      transform: scale(1.1);
+    }
+
+    .file-progress-container {
+      width: 100%;
+      height: 4px;
+      background: #E5E7EB;
+      border-radius: 99px;
+      margin-top: 4px;
+      overflow: hidden;
+      display: none;
+    }
+    .file-progress-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--text);
+      transition: width 0.3s ease;
+    }
+
+    .file-preview-status {
+      font-size: 0.625rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .file-preview-status.queued     { color: var(--text-muted); background: #F3F4F6; }
+    .file-preview-status.processing { color: var(--text); background: #E5E7EB; animation: pulse 2s infinite; }
+    .file-preview-status.done       { color: #065F46; background: #D1FAE5; }
+    .file-preview-status.error      { color: #991B1B; background: #FEE2E2; }
+
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.6; }
+      100% { opacity: 1; }
     }
 
     .btn-obsidian {
@@ -342,11 +405,16 @@
       cursor: pointer;
       transition: var(--transition);
       box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      align-self: center;
     }
-    .btn-obsidian:hover {
+    .btn-obsidian:hover:not(:disabled) {
       background: #333333;
       transform: translateY(-1px);
       box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+    }
+    .btn-obsidian:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
 
     /* ── Live Mic View ── */
@@ -678,6 +746,7 @@
     .prompt-icon {
       position: absolute;
       top: 13px;
+      right: 1.125rem;
       color: var(--text-muted);
       pointer-events: none;
       opacity: 0.6;
@@ -688,7 +757,7 @@
       background: var(--bg);
       border: 1px solid var(--border);
       border-radius: 1.25rem;
-      padding: 10px 2.85rem;
+      padding: 12px 2.85rem 10px 1.25rem;
       font-size: 0.875rem;
       font-family: 'Assistant', sans-serif;
       color: var(--text);
@@ -696,14 +765,14 @@
       transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
       direction: rtl;
       resize: none;
-      height: 46px;
+      height: 62px;
       line-height: 1.5;
       overflow-y: hidden;
     }
     .prompt-input:focus {
-      border-color: #2563EB;
+      border-color: var(--text);
       background: white;
-      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+      box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
       overflow-y: auto;
     }
     .prompt-input::placeholder { color: var(--text-muted); opacity: 0.6; }
@@ -717,8 +786,9 @@
       background: white;
       border: 1px solid var(--border);
       border-radius: 999px;
-      padding: 0 1.25rem;
-      height: 46px;
+      padding: 0 1rem;
+      width: 130px;
+      height: 60px;
       font-size: 0.875rem;
       font-weight: 700;
       color: var(--text);
@@ -729,6 +799,7 @@
       direction: rtl;
       display: flex;
       align-items: center;
+      justify-content: space-between;
       gap: 8px;
       box-shadow: var(--shadow-sm);
     }
@@ -736,9 +807,10 @@
     .lang-menu {
       top: calc(100% + 8px);
       bottom: auto !important;
-      max-height: 200px; /* Exactly 5 items (approx 40px each) */
+      border-radius: 80px;
+      max-height: 180px; /* Exactly 5 items */
       overflow-y: auto !important;
-      width: 160px !important;
+      width: 130px !important;
       padding: 2px 0;
       scrollbar-width: thin;
     }
@@ -847,8 +919,10 @@
         <div class="prompt-wrap">
           <i data-lucide="text-cursor-input" class="prompt-icon" size="18"></i>
           <textarea id="promptInput" class="prompt-input"
-                 placeholder="הקשר לתמלול: שמות, מונחים..."
-                 oninput="initialPrompt = this.value.trim()"></textarea>
+                 placeholder=
+                  "(אופציונלי) הוסיפו הקשר להקלטה — שמות, מונחים או נושא ההקלטה(מקס' 40 מילים)       לדוגמא: ישיבת צוות פיתוח. משתתפים: יוסי, רחל, אבי. נושאים:גיוס מפתחים."
+                  
+                 oninput="validatePrompt(this)"></textarea>
         </div>
       </div>
 
@@ -861,33 +935,13 @@
           <h3>גרור קבצים לכאן או לחץ להעלאה</h3>
           <p>MP3, WAV, M4A, FLAC נתמכים</p>
         </div>
-        <button class="dropzone-folder-btn" onclick="event.stopPropagation(); triggerFolderUpload()">
-          <i data-lucide="folder-up" size="18"></i> העלאת תיקייה
-        </button>
         <input type="file" id="fileInput" accept="audio/*" multiple style="display:none">
-        <input type="file" id="folderInput" accept="audio/*" webkitdirectory multiple style="display:none">
       </div>
 
-      <!-- File Selection — single file -->
-      <div id="viewFileSelected" class="file-selection">
-        <div class="file-chip">
-          <i data-lucide="file-audio" size="18"></i>
-          <span id="selectedFileName">filename.mp3</span>
-          <i data-lucide="x" size="16" class="file-chip-remove" onclick="resetFileSelection(event)"></i>
-        </div>
-        <button class="btn-obsidian" onclick="startFileTranscription()">
-          תמלל עכשיו
-        </button>
-      </div>
-
-      <!-- File Selection — multiple files (batch) -->
-      <div id="viewFileBatch" class="batch-panel">
-        <div class="batch-header">
-          <span class="batch-header-label" id="batchCount"></span>
-          <button class="batch-clear" onclick="resetFileSelection()">ביטול</button>
-        </div>
-        <div id="batchList" class="batch-list"></div>
-        <button class="btn-obsidian" onclick="startBatchTranscription()">
+      <!-- File Preview Area (Unified) -->
+      <div id="filePreviewArea" class="file-preview-area">
+        <div id="filePreviewList" class="file-preview-list"></div>
+        <button id="btnTranscribeAll" class="btn-obsidian" onclick="startBatchTranscription()">
           תמלל הכל
         </button>
       </div>
@@ -955,13 +1009,6 @@
   };
   const RTL_LANGS = new Set(['he', 'ar']);
 
-  const PLACEHOLDERS = {
-    he: 'הקשר (שמות, מונחים)', en: 'Context (names, terms)', ar: 'سياق (أسماء، مصطلحات)',
-    ru: 'Контекст (имена, термины)', es: 'Contexto (nombres, términos)', fr: 'Contexte (noms, termes)',
-    de: 'Kontext (Namen, Begriffe)', it: 'Contesto (nomi, termini)', pt: 'Contexto (nomes, termos)',
-    zh: '语境 (名称、术语)', ja: '文脈 (名前、用語)', ko: '문맥 (이름, 용어)'
-  };
-
   let historyData = [];
   let isRecording = false;
   let isPaused = false;
@@ -970,7 +1017,7 @@
   let currentFileReader = null;
   let _fileCancelled = false;
   let selectedLanguage = 'he';
-  let fileQueue = [];
+  let fileList = [];
   let fileQueueIndex = 0;
   let initialPrompt = '';
 
@@ -985,6 +1032,27 @@
     });
     // Apply persisted language selection
     _applyLanguageToggle(selectedLanguage);
+
+    // Setup Drag and Drop
+    const dz = document.getElementById('viewFile');
+    dz.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dz.style.borderColor = 'var(--text)';
+      dz.style.background = '#F3F4F6';
+    });
+    dz.addEventListener('dragleave', () => {
+      dz.style.borderColor = 'var(--border)';
+      dz.style.background = '#FAFAFA';
+    });
+    dz.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dz.style.borderColor = 'var(--border)';
+      dz.style.background = '#FAFAFA';
+      const files = Array.from(e.dataTransfer.files).filter(f => 
+        f.type.startsWith('audio/') || /\.(mp3|wav|m4a|flac|ogg|aac|wma|webm)$/i.test(f.name)
+      );
+      if (files.length) handleFiles(files);
+    });
   });
 
   function toggleLangMenu(e) {
@@ -1003,22 +1071,28 @@
   function _applyLanguageToggle(lang) {
     const txt = document.getElementById('currentLangText');
     if (txt) txt.textContent = LANG_LABELS[lang] || lang;
-    const isRTL = RTL_LANGS.has(lang);
-    const prompt = document.getElementById('promptInput');
-    if (prompt) {
-      prompt.style.direction = isRTL ? 'rtl' : 'ltr';
-      prompt.style.paddingRight = isRTL ? '2.85rem' : '1.25rem';
-      prompt.style.paddingLeft = isRTL ? '1.25rem' : '2.85rem';
-      
-      const icon = document.querySelector('.prompt-icon');
-      if (icon) {
-        icon.style.right = isRTL ? '1.125rem' : 'auto';
-        icon.style.left = isRTL ? 'auto' : '1.125rem';
-      }
+  }
 
-      const nativeHint = PLACEHOLDERS[lang] || PLACEHOLDERS['en'];
-      prompt.placeholder = `הקשר לתמלול | ${nativeHint}`;
+  function validatePrompt(el) {
+    const text = el.value;
+    // Split by any sequence of whitespace
+    const words = text.match(/\S+/g) || [];
+    if (words.length > 40) {
+      // Find the end index of the 40th word to preserve formatting up to that point
+      let count = 0;
+      let truncateIndex = 0;
+      const regex = /\S+/g;
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        count++;
+        if (count === 40) {
+          truncateIndex = match.index + match[0].length;
+          break;
+        }
+      }
+      el.value = text.substring(0, truncateIndex);
     }
+    initialPrompt = el.value.trim();
   }
 
   async function checkHealth() {
@@ -1026,8 +1100,13 @@
       const d = await (await fetch(`${API}/health`)).json();
       const dot = document.getElementById('dot');
       const text = document.getElementById('healthText');
-      dot.className = d.status === "ok" ? "status-dot ok" : "status-dot err";
-      if (d.status === "ok") {
+      const isOk = d.status === "ok";
+      dot.className = isOk ? "status-dot ok" : "status-dot err";
+      
+      const btnAll = document.getElementById('btnTranscribeAll');
+      if (btnAll) btnAll.disabled = !isOk;
+      
+      if (isOk) {
         const modelShort = d.model ? d.model.split('/').pop() : null;
         text.textContent = modelShort ? `${d.device} · ${modelShort}` : `מנוע פעיל: ${d.device}`;
       } else {
@@ -1036,6 +1115,8 @@
     } catch {
       document.getElementById('dot').className = "status-dot err";
       document.getElementById('healthText').textContent = "המנוע לא זמין";
+      const btnAll = document.getElementById('btnTranscribeAll');
+      if (btnAll) btnAll.disabled = true;
     }
   }
 
@@ -1060,9 +1141,9 @@
     
     glider.className = `segmented-glider glider-${mode}`;
 
-    document.getElementById('viewFile').style.display = (mode === 'file' && !currentFileBlob && !fileQueue.length) ? 'flex' : 'none';
-    document.getElementById('viewFileSelected').style.display = (mode === 'file' && currentFileBlob && !fileQueue.length) ? 'flex' : 'none';
-    document.getElementById('viewFileBatch').style.display = (mode === 'file' && fileQueue.length > 0) ? 'flex' : 'none';
+    const hasFiles = fileList.length > 0;
+    document.getElementById('viewFile').style.display = (mode === 'file' && !hasFiles) ? 'flex' : 'none';
+    document.getElementById('filePreviewArea').style.display = (mode === 'file' && hasFiles) ? 'flex' : 'none';
     document.getElementById('viewLive').style.display = (mode === 'live') ? 'flex' : 'none';
   }
 
@@ -1070,68 +1151,100 @@
     document.getElementById('fileInput').click();
   }
 
-  function triggerFolderUpload() {
-    document.getElementById('folderInput').click();
-  }
-
   document.getElementById('fileInput').addEventListener('change', (e) => {
     const files = Array.from(e.target.files).filter(f => f.type.startsWith('audio/') || /\.(mp3|wav|m4a|flac|ogg|aac|wma|webm)$/i.test(f.name));
-    if (!files.length) return;
-    if (files.length === 1) handleFileSelection(files[0]);
-    else handleMultiFileSelection(files);
-  });
-
-  document.getElementById('folderInput').addEventListener('change', (e) => {
-    const files = Array.from(e.target.files).filter(f => f.type.startsWith('audio/') || /\.(mp3|wav|m4a|flac|ogg|aac|wma|webm)$/i.test(f.name));
-    if (!files.length) return;
-    if (files.length === 1) handleFileSelection(files[0]);
-    else handleMultiFileSelection(files);
+    if (files.length) handleFiles(files);
     e.target.value = "";
   });
 
-  function handleFileSelection(file) {
-    fileQueue = [];
-    currentFileBlob = file;
-    document.getElementById('selectedFileName').textContent = file.name;
-    document.getElementById('viewFile').style.display = 'none';
-    document.getElementById('viewFileBatch').style.display = 'none';
-    document.getElementById('viewFileSelected').style.display = 'flex';
-    lucide.createIcons();
+  function handleFiles(files) {
+    const existingNames = new Set(fileList.map(f => f.name));
+    const newFiles = files.filter(f => !existingNames.has(f.name));
+    
+    if (newFiles.length < files.length) {
+      alert("חלק מהקבצים כבר קיימים ברשימה.");
+    }
+
+    if (newFiles.length) {
+      fileList = [...fileList, ...newFiles];
+      renderFilePreviews();
+    }
+    switchCreateMode('file');
   }
 
-  function handleMultiFileSelection(files) {
-    currentFileBlob = null;
-    fileQueue = files;
-    fileQueueIndex = 0;
-    document.getElementById('batchCount').textContent = `${files.length} קבצים נבחרו`;
-    const list = document.getElementById('batchList');
-    list.innerHTML = files.map((f, i) => `
-      <div class="batch-row" id="batch-row-${i}">
-        <i data-lucide="file-audio" size="14"></i>
-        <span class="batch-filename">${f.name}</span>
-        <span class="batch-status queued" id="batch-status-${i}">ממתין</span>
-      </div>`).join('');
-    document.getElementById('viewFile').style.display = 'none';
-    document.getElementById('viewFileSelected').style.display = 'none';
-    document.getElementById('viewFileBatch').style.display = 'flex';
+  function renderFilePreviews() {
+    const area = document.getElementById('filePreviewArea');
+    const list = document.getElementById('filePreviewList');
+    const btn  = document.getElementById('btnTranscribeAll');
+    
+    if (fileList.length === 0) {
+      area.style.display = 'none';
+      document.getElementById('viewFile').style.display = 'flex';
+      return;
+    }
+
+    list.innerHTML = fileList.map((file, i) => `
+      <div class="file-preview-item" id="file-item-${i}">
+        <div class="file-preview-remove" onclick="removeFile(${i})">
+          <i data-lucide="x" size="14"></i>
+        </div>
+        <div class="file-preview-icon">
+          <i data-lucide="file-audio" size="24"></i>
+        </div>
+        <div class="file-preview-name" title="${file.name}">${file.name}</div>
+        <div class="file-preview-status queued" id="file-status-${i}">הועלה</div>
+        <div class="file-progress-container" id="file-progress-container-${i}">
+          <div class="file-progress-bar" id="file-progress-bar-${i}"></div>
+        </div>
+      </div>
+    `).join('') + `
+      <div class="file-preview-item" onclick="triggerFileUpload()" style="border-style: dashed; cursor: pointer; background: transparent;">
+        <div class="file-preview-icon" style="background: var(--bg); color: var(--text-muted);">
+          <i data-lucide="plus" size="24"></i>
+        </div>
+        <div class="file-preview-name">הוסף קבצים</div>
+      </div>
+    `;
+    
+    btn.textContent = fileList.length > 1 ? `תמלל ${fileList.length} קבצים` : 'תמלל עכשיו';
+    
     lucide.createIcons();
+    area.style.display = 'flex';
+    document.getElementById('viewFile').style.display = 'none';
   }
 
-  function setBatchStatus(index, status) {
-    const el = document.getElementById(`batch-status-${index}`);
-    if (!el) return;
-    const labels = { queued: 'ממתין', processing: 'מעבד...', done: '✓ הושלם', error: 'שגיאה' };
-    el.className = `batch-status ${status}`;
-    el.textContent = labels[status] || status;
+  function removeFile(index) {
+    fileList.splice(index, 1);
+    renderFilePreviews();
+  }
+
+  function setFileStatus(index, status, percent = 0) {
+    const elStatus = document.getElementById(`file-status-${index}`);
+    const elProgressCont = document.getElementById(`file-progress-container-${index}`);
+    const elProgressBar = document.getElementById(`file-progress-bar-${index}`);
+    
+    if (!elStatus) return;
+    const labels = { queued: 'מוכן', processing: 'מעבד...', done: '✓ הושלם', error: 'שגיאה' };
+    elStatus.className = `file-preview-status ${status}`;
+    elStatus.textContent = labels[status] || status;
+
+    if (status === 'processing') {
+      elStatus.style.display = 'none';
+      if (elProgressCont) elProgressCont.style.display = 'block';
+      if (elProgressBar) elProgressBar.style.width = `${percent}%`;
+    } else {
+      elStatus.style.display = 'block';
+      if (elProgressCont) elProgressCont.style.display = 'none';
+    }
   }
 
   function resetFileSelection(e) {
     if (e) e.stopPropagation();
-    currentFileBlob = null;
-    fileQueue = [];
+    fileList = [];
     fileQueueIndex = 0;
+    currentFileBlob = null;
     document.getElementById('fileInput').value = "";
-    document.getElementById('folderInput').value = "";
+    renderFilePreviews();
     switchCreateMode('file');
   }
 
@@ -1158,7 +1271,6 @@
     document.getElementById('workspace').style.display = 'none';
     document.querySelector('.toggle-container').style.display = 'flex';
     activeMode = null;
-    if (currentFileBlob) resetFileSelection();
   }
 
   function stopTranscription() {
@@ -1169,9 +1281,10 @@
         currentFileReader.cancel();
         currentFileReader = null;
       }
-      fileQueue = [];
+      fileList = [];
       fileQueueIndex = 0;
       hideWorkspace();
+      renderFilePreviews();
     }
   }
 
@@ -1187,27 +1300,44 @@
 
   // ── Batch Transcription ──────────────────────────────────────────
   async function startBatchTranscription() {
-    if (!fileQueue.length) return;
+    if (!fileList.length) return;
     fileQueueIndex = 0;
-    currentFileBlob = fileQueue[0];
-    setBatchStatus(0, 'processing');
-    showWorkspace('file', `תמלול: ${currentFileBlob.name} (1/${fileQueue.length})`);
+    currentFileBlob = fileList[0];
+    setFileStatus(0, 'processing');
+    showWorkspace('file', `תמלול: ${currentFileBlob.name} (1/${fileList.length})`);
     await startFileTranscription(true);
   }
 
   function _onFileComplete(isBatch) {
     if (!isBatch) { finalizeSession(); return; }
-    setBatchStatus(fileQueueIndex, 'done');
+    setFileStatus(fileQueueIndex, 'done');
     fileQueueIndex++;
-    if (fileQueueIndex < fileQueue.length) {
-      currentFileBlob = fileQueue[fileQueueIndex];
-      setBatchStatus(fileQueueIndex, 'processing');
+    if (fileQueueIndex < fileList.length) {
+      currentFileBlob = fileList[fileQueueIndex];
+      setFileStatus(fileQueueIndex, 'processing');
       document.getElementById('wsResult').innerHTML = '';
-      document.getElementById('wsModeTitle').textContent = `תמלול: ${currentFileBlob.name} (${fileQueueIndex + 1}/${fileQueue.length})`;
+      document.getElementById('wsModeTitle').textContent = `תמלול: ${currentFileBlob.name} (${fileQueueIndex + 1}/${fileList.length})`;
       startFileTranscription(true);
     } else {
       finalizeSession();
+      resetFileSelection();
     }
+  }
+
+  function getAudioDuration(file) {
+    return new Promise((resolve) => {
+      const audio = new Audio();
+      const url = URL.createObjectURL(file);
+      audio.src = url;
+      audio.onloadedmetadata = () => {
+        URL.revokeObjectURL(url);
+        resolve(audio.duration);
+      };
+      audio.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve(0);
+      };
+    });
   }
 
   // ── File Transcription ──────────────────────────────────────────
@@ -1215,7 +1345,11 @@
     if (!currentFileBlob) return;
     _fileCancelled = false;
     const file = currentFileBlob;
+    const currentIndex = fileQueueIndex;
     if (!isBatch) showWorkspace('file', `תמלול: ${file.name}`);
+    
+    const duration = await getAudioDuration(file);
+    
     const fd = new FormData(); fd.append("file", file); fd.append("language", selectedLanguage);
     if (initialPrompt) fd.append("initial_prompt", initialPrompt);
     
@@ -1237,7 +1371,7 @@
           if (!line.startsWith("data: ")) continue;
           let d; try { d = JSON.parse(line.slice(6)); } catch { continue; }
           if (d.error) throw new Error(d.error);
-          // Final event carries the agent post-processed full text — use it for the library entry
+          
           if (d.final_text !== undefined) { fullText = d.final_text.trim() || fullText; continue; }
           if (d.text?.trim()) {
             const chunk = d.text.trim();
@@ -1245,6 +1379,10 @@
             appendChunk(chunk);
             if (typeof d.start === 'number' && typeof d.end === 'number') {
               segments.push({ start: d.start, end: d.end, text: d.text });
+              if (duration > 0) {
+                const percent = Math.min(99, Math.round((d.end / duration) * 100));
+                setFileStatus(currentIndex, 'processing', percent);
+              }
             }
           }
         }
@@ -1252,7 +1390,7 @@
 
       currentFileReader = null;
       if (_fileCancelled || !fullText.trim()) {
-        hideWorkspace();
+        if (!isBatch) hideWorkspace();
         return;
       }
 
@@ -1270,16 +1408,17 @@
       _onFileComplete(isBatch);
     } catch (e) {
       if (isBatch) {
-        setBatchStatus(fileQueueIndex, 'error');
+        setFileStatus(currentIndex, 'error');
         fileQueueIndex++;
-        if (fileQueueIndex < fileQueue.length) {
-          currentFileBlob = fileQueue[fileQueueIndex];
-          setBatchStatus(fileQueueIndex, 'processing');
+        if (fileQueueIndex < fileList.length) {
+          currentFileBlob = fileList[fileQueueIndex];
+          setFileStatus(fileQueueIndex, 'processing');
           document.getElementById('wsResult').innerHTML = '';
-          document.getElementById('wsModeTitle').textContent = `תמלול: ${currentFileBlob.name} (${fileQueueIndex + 1}/${fileQueue.length})`;
+          document.getElementById('wsModeTitle').textContent = `תמלול: ${currentFileBlob.name} (${fileQueueIndex + 1}/${fileList.length})`;
           startFileTranscription(true);
         } else {
           finalizeSession();
+          resetFileSelection();
         }
       } else {
         alert("שגיאה בתמלול: " + e.message);
