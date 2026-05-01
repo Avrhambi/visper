@@ -1,4 +1,5 @@
-# וִויסְפֶּר — Local Speech-to-Text
+
+# Visper - Local transcription tool
 
 Offline speech-to-text on your own hardware. No cloud, no subscriptions, no data leaves your machine. Self-benchmarks and configures itself on first run.
 
