@@ -62,11 +62,9 @@ async def _save_upload(file: UploadFile) -> pathlib.Path:
 async def warmup():
     async def _load():
         try:
-            from local_stt_he.api import _get_config, _get_engine
-            # Load both configs; if they share the same hardware keys only one model is created
-            for bucket in ("streaming", "medium"):
-                cfg = _get_config(bucket)
-                await asyncio.to_thread(_get_engine, cfg)
+            from local_stt_he.api import _get_config, _get_router
+            cfg = _get_config("medium")
+            await asyncio.to_thread(lambda: _get_router(cfg).get("he"))
         except Exception as e:
             log.warning("Warmup failed: %s", e)
     asyncio.create_task(_load())
@@ -76,11 +74,14 @@ async def warmup():
 def health():
     try:
         from local_stt_he.benchmark import get_best_config
+        from local_stt_he.api import _router
         cfg = get_best_config("medium")
+        model = _router._active_model_id if _router else None
         return {
             "status": "ok",
             "device": cfg.get("device"),
             "compute_type": cfg.get("compute_type"),
+            "model": model,
         }
     except Exception as e:
         return {"status": "error", "error": str(e)}
@@ -156,7 +157,7 @@ async def transcribe_stream(request: Request, file: UploadFile = File(...), lang
             from local_stt_he.postprocess import normalize_text
             _norm = lambda t: normalize_text(t, language)
             t0 = time.monotonic()
-            transcribe_chunked(
+            full_text = transcribe_chunked(
                 str(tmp_path),
                 lambda seg: q.put({**seg, "text": _norm(seg["text"])}),
                 bucket,
@@ -166,6 +167,8 @@ async def transcribe_stream(request: Request, file: UploadFile = File(...), lang
             )
             elapsed = time.monotonic() - t0
             if not abort_event.is_set():
+                # Emit final agent-post-processed text so the client can update the library entry
+                q.put({"final_text": full_text})
                 rtf = round(elapsed / audio_duration, 3) if audio_duration else None
                 print(f"[stream]     audio={audio_duration or 0:.1f}s  duration={elapsed:.1f}s  RTF={rtf}", flush=True)
         except Exception as e:
@@ -211,12 +214,12 @@ async def transcribe_stream(request: Request, file: UploadFile = File(...), lang
 @app.websocket("/ws/live")
 async def live_ws(websocket: WebSocket):
     await websocket.accept()
-    from local_stt_he.api import _get_config, _get_engine
+    from local_stt_he.api import _get_config, _get_router
 
     language       = websocket.query_params.get("language", "he")
     initial_prompt = websocket.query_params.get("initial_prompt", "") or None
     cfg    = _get_config("streaming")
-    engine = _get_engine(cfg)
+    engine = _get_router(cfg).get(language)
 
     _SAMPLE_RATE          = 16000
     _BLOCK_SIZE           = 512
