@@ -3,7 +3,7 @@
 
 Offline speech-to-text on your own hardware. No cloud, no subscriptions, no data leaves your machine. Self-benchmarks and configures itself on first run.
 
-Supports Hebrew, English, Arabic, Russian, and other languages — each routed to the best model automatically.
+Supports Hebrew, English, Arabic, Russian, and other languages — each routed to the best model automatically. Translate any language to English in one flag.
 
 **What's interesting about it:**
 - Self-benchmarks all available backends on first run (CUDA / OpenVINO / CPU), picks the best, caches results permanently
@@ -15,28 +15,11 @@ Supports Hebrew, English, Arabic, Russian, and other languages — each routed t
 
 ## Getting Started
 
-### Non-developers (Windows)
-
-**One prerequisite:** [Python 3.10+](https://www.python.org/downloads/) — check **"Add Python to PATH"** during installation.
-
-Then:
-
-1. Download this repo ([ZIP](https://github.com/Avrhambi/visper/archive/refs/heads/master.zip)) and extract it
-2. Double-click **`start.bat`**
-
-That's it. On first run it installs all dependencies, downloads the model (~1.5 GB, one time), runs the hardware benchmark, and opens the web UI at `http://localhost:8000` in your browser. Every run after that starts in a few seconds.
-
-To get the latest version: double-click **`update.bat`**.
-
-> If anything goes wrong during setup, the error screen will copy a help message to your clipboard automatically — paste it into an ai chatbot like: ChatGPT or Claude for step-by-step guidance.
-
-### Developers
-
 ```bash
 git clone https://github.com/Avrhambi/visper && cd visper
 python install.py           # installs deps, downloads model (~1.5 GB once), runs benchmark
-visper-server                  # web UI at http://localhost:8000
-visper-file audio.mp3          # or use the CLI directly
+visper-server               # web UI at http://localhost:8000
+visper-file audio.mp3       # or use the CLI directly
 ```
 
 Requires Python 3.10+ and [ffmpeg](https://ffmpeg.org) on PATH (WAV files work without it).
@@ -58,8 +41,6 @@ Language routing selects the right model per request: Hebrew fine-tune (`ivrit-a
 ```bash
 visper-server          # starts on http://localhost:8000
 ```
-
-Or double-click `start.bat` — it starts the server and opens the browser automatically.
 
 **Features:**
 - Upload single or multiple audio files (MP3, WAV, M4A, and more) — or a whole folder
@@ -85,8 +66,8 @@ visper-file audio.mp3 --output json                        # JSON with segments,
 visper-file audio.mp3 --no-file --clip                     # print + copy to clipboard, no file written
 visper-file audio.mp3 --progress                           # print each segment as it is decoded
 visper-file audio.mp3 --language en                        # transcribe English
-visper-file audio.mp3 --language he --translate             # transcribe Hebrew, translate to English
-visper-file audio.mp3 --language ar --translate             # transcribe Arabic, translate to English
+visper-file audio.mp3 --language he --translate            # transcribe Hebrew, translate to English
+visper-file audio.mp3 --language ar --translate            # transcribe Arabic, translate to English
 visper-file audio.mp3 --prompt "team meeting, participants: Yossi, Rachel"  # initial prompt
 visper-file *.wav                                          # batch mode — all WAV files in current dir
 ```
@@ -268,27 +249,25 @@ RTF budget = 0.85 (1.0 = real-time). WER = 0.179, CER = 0.084 on 221 Hebrew file
 ## Project Structure
 
 ```
-start.bat                    ← Windows launcher: setup + server + browser (double-click)
-update.bat                   ← Windows updater: git pull + pip install (double-click)
 install.py                   ← first-run setup: installs deps, downloads model, runs benchmark
 web/index.html               ← web UI (served by visper-server)
-visper/benchmark.py    ← hardware detection, candidate selection, fallback chain
-visper/resource.py     ← resource profile enforcement (threads, GPU, VRAM guard, priority)
-visper/params.py       ← Whisper parameter selection per bucket/tier
-visper/model_router.py ← single-slot language-based model manager; swaps on language change
-visper/transcriber.py  ← dispatches to faster-whisper or openvino_genai; audio pre-processing
-visper/api.py          ← public API: transcribe(), stream_transcribe(), transcribe_chunked()
-visper/streamer.py     ← VAD-gated live transcription with sliding window overlap
-visper/postprocess.py  ← text normalization (Hebrew + language-neutral)
-visper/constants.py    ← audio constants (SAMPLE_RATE, CHANNELS, BLOCK_SIZE, DTYPE)
-visper/server.py       ← FastAPI server
-transcribe_file.py            ← CLI offline transcription
-transcribe_live.py            ← CLI live/streaming transcription
-run_benchmark.py              ← benchmark entry point
-config.yaml                   ← user-tunable parameters (committed)
-benchmark_results.json        ← auto-generated, never hand-edited (gitignored)
-records/                      ← Hebrew audio files used as benchmark inputs
-tests/                        ← standalone hardware validation scripts
+visper/benchmark.py          ← hardware detection, candidate selection, fallback chain
+visper/resource.py           ← resource profile enforcement (threads, GPU, VRAM guard, priority)
+visper/params.py             ← Whisper parameter selection per bucket/tier
+visper/model_router.py       ← single-slot language-based model manager; swaps on language change
+visper/transcriber.py        ← dispatches to faster-whisper or openvino_genai; audio pre-processing
+visper/api.py                ← public API: transcribe(), stream_transcribe(), transcribe_chunked()
+visper/streamer.py           ← VAD-gated live transcription with sliding window overlap
+visper/postprocess.py        ← text normalization (Hebrew + language-neutral)
+visper/constants.py          ← audio constants (SAMPLE_RATE, CHANNELS, BLOCK_SIZE, DTYPE)
+visper/server.py             ← FastAPI server
+transcribe_file.py           ← CLI offline transcription
+transcribe_live.py           ← CLI live/streaming transcription
+run_benchmark.py             ← benchmark entry point
+config.yaml                  ← user-tunable parameters (committed)
+benchmark_results.json       ← auto-generated, never hand-edited (gitignored)
+records/                     ← Hebrew audio files used as benchmark inputs
+tests/                       ← standalone hardware validation scripts
 ```
 
 ---
@@ -301,7 +280,6 @@ Standalone scripts for benchmarking individual backends. Not unit tests — run 
 python tests/test_cpu.py          # CPU thread configs
 python tests/test_gpu.py          # CUDA compute types
 python tests/test_openvino.py     # Intel Iris Xe via OpenVINO
-python tests/test_local_config.py # full local config sweep
 ```
 
 ---
