@@ -69,7 +69,7 @@ def main():
         try:
             import yaml as _yaml
             from pathlib import Path as _Path
-            _cfg_path = _Path(__file__).parent / "config.yaml"
+            _cfg_path = _Path(__file__).parent.parent / "config.yaml"
             _cfg = _yaml.safe_load(_cfg_path.read_text()) if _cfg_path.exists() else {}
             _cfg['accuracy_mode'] = args.accuracy
         except Exception:

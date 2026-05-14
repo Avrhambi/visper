@@ -37,7 +37,7 @@ import argparse
 import json
 import time
 
-ROOT = Path(__file__).parent
+ROOT = Path(__file__).parent.parent
 
 from visper.api import _resolve_bucket
 
