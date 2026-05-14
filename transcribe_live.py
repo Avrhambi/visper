@@ -51,8 +51,9 @@ def main():
                         choices=["auto", "fast", "balanced", "accurate"],
                         default=None,
                         help="Override accuracy_mode from config.yaml")
-    parser.add_argument("--language", choices=["he", "en"], default="he",
-                        help="Language to transcribe (default: he)")
+    parser.add_argument("--language",
+                        choices=["he", "en", "ar", "ru", "es", "fr", "de", "it", "pt", "zh", "ja", "ko"],
+                        default="he", help="Language to transcribe (default: he)")
     parser.add_argument("--prompt", metavar="TEXT",
                         help="Initial prompt: seed Whisper with names, terms, or context "
                              "to improve accuracy (max ~55 words; use the same language as the audio)")

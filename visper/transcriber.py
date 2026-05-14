@@ -258,6 +258,7 @@ class Transcriber:
         is_aborted: Optional[Callable[[], bool]] = None,
         language: str = None,
         initial_prompt: str = None,
+        task: str = "transcribe",
     ) -> TranscriptResult:
         """
         source: file path or float32 numpy array at 16 kHz.
@@ -279,7 +280,8 @@ class Transcriber:
             return self._transcribe_via_worker(source, bucket, params,
                                                vad_filter, vad_min_silence_ms,
                                                vad_speech_pad_ms, is_aborted=is_aborted,
-                                               language=_lang, initial_prompt=initial_prompt)
+                                               language=_lang, initial_prompt=initial_prompt,
+                                               task=task)
 
         t0 = time.time()
 
@@ -300,6 +302,8 @@ class Transcriber:
 
             kwargs = params.as_transcribe_kwargs()
             kwargs["language"] = _lang
+            if task == "translate":
+                kwargs["task"] = "translate"
             if initial_prompt:
                 kwargs["initial_prompt"] = initial_prompt
             if self._hotwords:
@@ -342,6 +346,8 @@ class Transcriber:
                     params = get_params_for_tier(upgrade, bucket, self._config)
                     kwargs2 = params.as_transcribe_kwargs()
                     kwargs2["language"] = _lang
+                    if task == "translate":
+                        kwargs2["task"] = "translate"
                     if initial_prompt:
                         kwargs2["initial_prompt"] = initial_prompt
                     kwargs2["vad_filter"] = vad_filter
@@ -357,7 +363,7 @@ class Transcriber:
                     text = "".join(s.text for s in seg_list).strip()
 
             from visper.postprocess import normalize_text
-            text = normalize_text(text, _lang)
+            text = normalize_text(text, "en" if task == "translate" else _lang)
 
         elif self._backend_type == "openvino":
             import openvino_genai as ov_genai
@@ -404,6 +410,7 @@ class Transcriber:
         is_aborted: Optional[Callable[[], bool]] = None,
         language: str = None,
         initial_prompt: str = None,
+        task: str = "transcribe",
     ) -> TranscriptResult:
         """Send a transcription request to the venv worker subprocess."""
         t0 = time.time()
@@ -424,6 +431,8 @@ class Transcriber:
         kwargs = params.as_transcribe_kwargs()
         kwargs["language"] = _lang
         kwargs["language_token"] = f"<|{_lang}|>"
+        if task == "translate":
+            kwargs["task"] = "translate"
         if initial_prompt:
             kwargs["initial_prompt"] = initial_prompt
         kwargs["vad_filter"] = vad_filter

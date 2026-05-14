@@ -88,8 +88,9 @@ def health():
 
 
 @app.post("/transcribe")
-async def transcribe_endpoint(file: UploadFile = File(...), language: str = Form("he"), initial_prompt: str = Form("")):
+async def transcribe_endpoint(file: UploadFile = File(...), language: str = Form("he"), initial_prompt: str = Form(""), translate: str = Form("0")):
     tmp_path = await _save_upload(file)
+    task = "translate" if translate in ("1", "true", "yes") else "transcribe"
     try:
         import soundfile as sf
         from visper.api import transcribe_chunked
@@ -106,7 +107,7 @@ async def transcribe_endpoint(file: UploadFile = File(...), language: str = Form
         t0 = time.monotonic()
         text = await asyncio.to_thread(
             transcribe_chunked, str(tmp_path), segments.append, bucket, None, language,
-            initial_prompt or None,
+            initial_prompt or None, task,
         )
         elapsed = time.monotonic() - t0
 
@@ -121,8 +122,9 @@ async def transcribe_endpoint(file: UploadFile = File(...), language: str = Form
 
 
 @app.post("/transcribe/stream")
-async def transcribe_stream(request: Request, file: UploadFile = File(...), language: str = Form("he"), initial_prompt: str = Form("")):
+async def transcribe_stream(request: Request, file: UploadFile = File(...), language: str = Form("he"), initial_prompt: str = Form(""), translate: str = Form("0")):
     tmp_path = await _save_upload(file)
+    task = "translate" if translate in ("1", "true", "yes") else "transcribe"
     q: queue.Queue = queue.Queue()
     _sentinel = object()
     abort_event = threading.Event()
@@ -139,7 +141,8 @@ async def transcribe_stream(request: Request, file: UploadFile = File(...), lang
             bucket = _bucket_for_duration(audio_duration)
 
             from visper.postprocess import normalize_text
-            _norm = lambda t: normalize_text(t, language)
+            _norm_lang = "en" if task == "translate" else language
+            _norm = lambda t: normalize_text(t, _norm_lang)
             t0 = time.monotonic()
             full_text = transcribe_chunked(
                 str(tmp_path),
@@ -148,6 +151,7 @@ async def transcribe_stream(request: Request, file: UploadFile = File(...), lang
                 is_aborted=lambda: abort_event.is_set(),
                 language=language,
                 initial_prompt=initial_prompt or None,
+                task=task,
             )
             elapsed = time.monotonic() - t0
             if not abort_event.is_set():
@@ -202,6 +206,8 @@ async def live_ws(websocket: WebSocket):
 
     language       = websocket.query_params.get("language", "he")
     initial_prompt = websocket.query_params.get("initial_prompt", "") or None
+    _translate     = websocket.query_params.get("translate", "0")
+    ws_task        = "translate" if _translate in ("1", "true", "yes") else "transcribe"
     cfg    = _get_config("streaming")
     engine = _get_router(cfg).get(language)
 
@@ -217,7 +223,7 @@ async def live_ws(websocket: WebSocket):
     audio_offset      = 0  # cumulative samples emitted so far
 
     def _transcribe(chunk: np.ndarray, prompt: str = None) -> tuple:
-        result = engine.transcribe(chunk, bucket="streaming", language=language, initial_prompt=prompt)
+        result = engine.transcribe(chunk, bucket="streaming", language=language, initial_prompt=prompt, task=ws_task)
         return result.text.strip(), result.segments or []
 
     async def _emit(chunk: np.ndarray) -> None:

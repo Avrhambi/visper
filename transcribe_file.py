@@ -137,6 +137,7 @@ def transcribe_one(path: Path, engine, args, cfg: dict) -> tuple[str, float]:
     """Returns (text, rtf). Raises on error."""
     bucket = _resolve_bucket(path, args.bucket)
     fmt = args.output or cfg.get("output_format", "txt")
+    task = "translate" if getattr(args, "translate", False) else "transcribe"
 
     print(f"[STT] Transcribing {path.name} (bucket={bucket})...", file=sys.stderr)
 
@@ -145,10 +146,10 @@ def transcribe_one(path: Path, engine, args, cfg: dict) -> tuple[str, float]:
         def _progress_cb(seg: dict) -> None:
             print(f"  [{seg['start']:.1f}s] {seg['text'].strip()}", file=sys.stderr)
         result = engine.transcribe(source=path, bucket=bucket, on_segment=_progress_cb,
-                                   language=args.language, initial_prompt=prompt)
+                                   language=args.language, initial_prompt=prompt, task=task)
     else:
         result = engine.transcribe(source=path, bucket=bucket, language=args.language,
-                                   initial_prompt=prompt)
+                                   initial_prompt=prompt, task=task)
 
     if fmt == "srt":
         text_out = _format_srt(result)
@@ -206,8 +207,11 @@ def main():
                         choices=["foreground", "background", "minimal"],
                         default=None,
                         help="Override resource_profile from config.yaml")
-    parser.add_argument("--language", choices=["he", "en"], default="he",
-                        help="Language to transcribe (default: he)")
+    parser.add_argument("--language",
+                        choices=["he", "en", "ar", "ru", "es", "fr", "de", "it", "pt", "zh", "ja", "ko"],
+                        default="he", help="Language to transcribe (default: he)")
+    parser.add_argument("--translate", action="store_true",
+                        help="Translate audio to English (non-English languages only)")
     parser.add_argument("--prompt", metavar="TEXT",
                         help="Initial prompt: seed Whisper with names, terms, or context "
                              "to improve accuracy (max ~55 words; use the same language as the audio)")

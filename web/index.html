@@ -790,18 +790,30 @@
     }
     .prompt-input::placeholder { color: var(--text-muted); opacity: 0.6; }
 
-    /* ── Language Select ── */
-    .lang-select-wrap {
-      position: relative;
-      flex-shrink: 0;
-    }
-    .lang-select {
+    /* ── Language Select & Translation ── */
+    .lang-translation-container {
+      display: flex;
+      align-items: center;
       background: white;
       border: 1px solid var(--border);
       border-radius: 999px;
-      padding: 0 1rem;
-      width: 130px;
+      padding: 0 4px;
       height: 60px;
+      box-shadow: var(--shadow-sm);
+      transition: var(--transition);
+      direction: rtl;
+    }
+    .lang-translation-container:hover {
+      border-color: var(--text-muted);
+    }
+
+    .lang-select {
+      background: transparent;
+      border: none;
+      border-radius: 999px;
+      padding: 0 1rem;
+      min-width: 110px;
+      height: 52px;
       font-size: 0.875rem;
       font-weight: 700;
       color: var(--text);
@@ -814,18 +826,42 @@
       align-items: center;
       justify-content: space-between;
       gap: 8px;
-      box-shadow: var(--shadow-sm);
     }
-    .lang-select:hover { border-color: var(--text-muted); background: var(--bg); }
+    .lang-select:hover { background: var(--bg); }
+    
+    .target-select {
+      min-width: 100px;
+    }
+
+    .lang-arrow {
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 4px;
+      opacity: 0.6;
+    }
+
+    .lang-tier-header {
+      font-size: 0.7rem;
+      font-weight: 800;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      padding: 12px 16px 4px;
+      letter-spacing: 0.05em;
+      pointer-events: none;
+    }
+
     .lang-menu {
       top: calc(100% + 8px);
       bottom: auto !important;
-      border-radius: 80px;
-      max-height: 180px; /* Exactly 5 items */
+      border-radius: 1.25rem;
+      max-height: 380px;
       overflow-y: auto !important;
-      width: 130px !important;
-      padding: 2px 0;
+      width: 160px !important;
+      padding: 4px 0;
       scrollbar-width: thin;
+      box-shadow: var(--shadow-xl);
     }
     .lang-menu::-webkit-scrollbar {
       width: 4px;
@@ -904,26 +940,49 @@
       
       <!-- Settings Row: Language & Prompt -->
       <div class="settings-row">
-        <!-- Language selector (Right of context field in RTL) -->
-        <div class="lang-select-wrap">
+        <!-- Unified Source ➔ Target Component -->
+        <div class="lang-translation-container">
+          <!-- Source Language Selector -->
           <div class="dl-wrapper">
-            <button id="langSelectBtn" class="lang-select" onclick="toggleLangMenu(event)">
-              <span id="currentLangText">עברית</span>
+            <button id="sourceLangBtn" class="lang-select" onclick="toggleSourceMenu(event)">
+              <span id="sourceLangText">עברית</span>
               <i data-lucide="chevron-down" size="14" style="opacity: 0.5;"></i>
             </button>
-            <div id="langMenu" class="dl-menu lang-menu">
-              <button class="dl-option" onclick="setLanguage('he')">עברית</button>
-              <button class="dl-option" onclick="setLanguage('en')">אנגלית</button>
-              <button class="dl-option" onclick="setLanguage('ar')">ערבית</button>
-              <button class="dl-option" onclick="setLanguage('ru')">רוסית</button>
-              <button class="dl-option" onclick="setLanguage('es')">ספרדית</button>
-              <button class="dl-option" onclick="setLanguage('fr')">צרפתית</button>
-              <button class="dl-option" onclick="setLanguage('de')">גרמנית</button>
-              <button class="dl-option" onclick="setLanguage('it')">איטלקית</button>
-              <button class="dl-option" onclick="setLanguage('pt')">פורטוגזית</button>
-              <button class="dl-option" onclick="setLanguage('zh')">סינית</button>
-              <button class="dl-option" onclick="setLanguage('ja')">יפנית</button>
-              <button class="dl-option" onclick="setLanguage('ko')">קוריאנית</button>
+            <div id="sourceLangMenu" class="dl-menu lang-menu tiered-menu">
+              <div class="lang-tier-header">בסיס</div>
+              <button class="dl-option" onclick="setSourceLanguage('he')">עברית</button>
+              <button class="dl-option" onclick="setSourceLanguage('en')">אנגלית</button>
+              <button class="dl-option" onclick="setSourceLanguage('ar')">ערבית</button>
+              
+              <div class="lang-tier-header">אירופה</div>
+              <button class="dl-option" onclick="setSourceLanguage('ru')">רוסית</button>
+              <button class="dl-option" onclick="setSourceLanguage('es')">ספרדית</button>
+              <button class="dl-option" onclick="setSourceLanguage('fr')">צרפתית</button>
+              <button class="dl-option" onclick="setSourceLanguage('de')">גרמנית</button>
+              <button class="dl-option" onclick="setSourceLanguage('it')">איטלקית</button>
+              <button class="dl-option" onclick="setSourceLanguage('pt')">פורטוגזית</button>
+              
+              <div class="lang-tier-header">אסיה</div>
+              <button class="dl-option" onclick="setSourceLanguage('zh')">סינית</button>
+              <button class="dl-option" onclick="setSourceLanguage('ja')">יפנית</button>
+              <button class="dl-option" onclick="setSourceLanguage('ko')">קוריאנית</button>
+            </div>
+          </div>
+
+          <!-- Directional Arrow (RTL aware) -->
+          <div class="lang-arrow">
+            <i data-lucide="arrow-left" size="14"></i>
+          </div>
+
+          <!-- Target Language Selector -->
+          <div class="dl-wrapper">
+            <button id="targetLangBtn" class="lang-select target-select" onclick="toggleTargetMenu(event)">
+              <span id="targetLangText">עברית</span>
+              <i data-lucide="chevron-down" size="14" style="opacity: 0.5;"></i>
+            </button>
+            <div id="targetLangMenu" class="dl-menu lang-menu">
+              <button class="dl-option" id="optTargetSource" onclick="setTargetLanguage('source')">עברית</button>
+              <button class="dl-option" id="optTargetEn" onclick="setTargetLanguage('en')">אנגלית</button>
             </div>
           </div>
         </div>
@@ -1030,6 +1089,7 @@
   let currentFileReader = null;
   let _fileCancelled = false;
   let selectedLanguage = 'he';
+  let translateToEn = false;
   let fileList = [];
   let fileQueueIndex = 0;
   let initialPrompt = '';
@@ -1044,7 +1104,7 @@
       document.querySelectorAll('.dl-menu.open').forEach(m => m.classList.remove('open'));
     });
     // Apply persisted language selection
-    _applyLanguageToggle(selectedLanguage);
+    setSourceLanguage(selectedLanguage);
 
     // Setup Drag and Drop
     const dz = document.getElementById('viewFile');
@@ -1068,44 +1128,90 @@
     });
   });
 
-  function toggleLangMenu(e) {
+  function toggleSourceMenu(e) {
     e.stopPropagation();
-    const menu = document.getElementById('langMenu');
+    const menu = document.getElementById('sourceLangMenu');
     document.querySelectorAll('.dl-menu.open').forEach(m => { if (m !== menu) m.classList.remove('open'); });
     menu.classList.toggle('open');
   }
 
-  function setLanguage(lang) {
+  function toggleTargetMenu(e) {
+    e.stopPropagation();
+    const menu = document.getElementById('targetLangMenu');
+    document.querySelectorAll('.dl-menu.open').forEach(m => { if (m !== menu) m.classList.remove('open'); });
+    menu.classList.toggle('open');
+  }
+
+  function setSourceLanguage(lang) {
     selectedLanguage = lang;
+    translateToEn = false;
+    
+    // Update Source Button Text
+    const sourceTxt = document.getElementById('sourceLangText');
+    if (sourceTxt) sourceTxt.textContent = LANG_LABELS[lang] || lang;
+
+    // Update Target Options
+    const optTargetSource = document.getElementById('optTargetSource');
+    const optTargetEn = document.getElementById('optTargetEn');
+    const targetTxt = document.getElementById('targetLangText');
+
+    if (optTargetSource) optTargetSource.textContent = LANG_LABELS[lang] || lang;
+    if (targetTxt) targetTxt.textContent = LANG_LABELS[lang] || lang;
+
+    if (lang === 'en') {
+      if (optTargetEn) optTargetEn.style.display = 'none';
+      // If source is English, Target selector is basically just showing English
+    } else {
+      if (optTargetEn) optTargetEn.style.display = 'block';
+    }
+
     _applyLanguageToggle(lang);
-    document.getElementById('langMenu').classList.remove('open');
+    document.getElementById('sourceLangMenu').classList.remove('open');
+  }
+
+  function setTargetLanguage(target) {
+    const targetTxt = document.getElementById('targetLangText');
+    if (target === 'en') {
+      translateToEn = true;
+      if (targetTxt) targetTxt.textContent = LANG_LABELS['en'];
+    } else {
+      translateToEn = false;
+      if (targetTxt) targetTxt.textContent = LANG_LABELS[selectedLanguage] || selectedLanguage;
+    }
+
+    // Update output direction
+    const wsResult = document.getElementById('wsResult');
+    if (wsResult) {
+      const outRtl = RTL_LANGS.has(selectedLanguage) && !translateToEn;
+      wsResult.style.direction = outRtl ? 'rtl' : 'ltr';
+      wsResult.style.textAlign = outRtl ? 'right' : 'left';
+    }
+
+    document.getElementById('targetLangMenu').classList.remove('open');
   }
 
   function _applyLanguageToggle(lang) {
-    const txt = document.getElementById('currentLangText');
-    if (txt) txt.textContent = LANG_LABELS[lang] || lang;
-
-    const isRtl = RTL_LANGS.has(lang);
+    const srcRtl = RTL_LANGS.has(lang);   // source language direction (for prompt)
+    const outRtl = srcRtl && !translateToEn; // output direction (for workspace)
     const promptInput = document.getElementById('promptInput');
     const promptIcon = document.querySelector('.prompt-icon');
     const wsResult = document.getElementById('wsResult');
 
     if (promptInput) {
-      promptInput.style.direction = isRtl ? 'rtl' : 'ltr';
-      promptInput.style.textAlign = isRtl ? 'right' : 'left';
-      // Adjust padding based on icon position
-      promptInput.style.paddingRight = isRtl ? '2.85rem' : '1.25rem';
-      promptInput.style.paddingLeft = isRtl ? '1.25rem' : '2.85rem';
+      promptInput.style.direction = srcRtl ? 'rtl' : 'ltr';
+      promptInput.style.textAlign = srcRtl ? 'right' : 'left';
+      promptInput.style.paddingRight = srcRtl ? '2.85rem' : '1.25rem';
+      promptInput.style.paddingLeft = srcRtl ? '1.25rem' : '2.85rem';
     }
 
     if (promptIcon) {
-      promptIcon.style.right = isRtl ? '1.125rem' : 'auto';
-      promptIcon.style.left = isRtl ? 'auto' : '1.125rem';
+      promptIcon.style.right = srcRtl ? '1.125rem' : 'auto';
+      promptIcon.style.left = srcRtl ? 'auto' : '1.125rem';
     }
 
     if (wsResult) {
-      wsResult.style.direction = isRtl ? 'rtl' : 'ltr';
-      wsResult.style.textAlign = isRtl ? 'right' : 'left';
+      wsResult.style.direction = outRtl ? 'rtl' : 'ltr';
+      wsResult.style.textAlign = outRtl ? 'right' : 'left';
     }
   }
 
@@ -1387,6 +1493,7 @@
     const duration = await getAudioDuration(file);
     
     const fd = new FormData(); fd.append("file", file); fd.append("language", selectedLanguage);
+    if (translateToEn) fd.append("translate", "1");
     if (initialPrompt) fd.append("initial_prompt", initialPrompt);
     
     try {
@@ -1438,6 +1545,7 @@
         segments: segments.length > 0 ? segments : null,
         type: 'file',
         language: selectedLanguage,
+        translated: translateToEn,
         audioUrl: URL.createObjectURL(file)
       };
       addToLibrary(item);
@@ -1492,6 +1600,7 @@
     processor = audioCtx.createScriptProcessor(512,1,1);
 
     const _wsParams = new URLSearchParams({ language: selectedLanguage });
+    if (translateToEn) _wsParams.set('translate', '1');
     if (initialPrompt) _wsParams.set('initial_prompt', initialPrompt);
     liveWs = new WebSocket(`${WS_URL}?${_wsParams}`);
     liveWs.onmessage = ({ data }) => {
@@ -1572,6 +1681,7 @@
       segments: liveSegments.length > 0 ? liveSegments : null,
       type: 'live',
       language: selectedLanguage,
+      translated: translateToEn,
       audioUrl: blob ? URL.createObjectURL(blob) : null
     };
     addToLibrary(item);
@@ -1661,7 +1771,7 @@
           <div>
             <div class="lib-title">
               ${item.title}
-              <span class="lang-tag">${LANG_LABELS[item.language] || item.language}</span>
+              <span class="lang-tag">${item.translated ? (LANG_LABELS[item.language] || item.language) + ' → EN' : (LANG_LABELS[item.language] || item.language)}</span>
             </div>
             <div class="lib-meta">${item.date}</div>
           </div>
@@ -1709,11 +1819,11 @@
     renderDisplayText(item, div.querySelector(`#display-${item.id}`));
     div.querySelector(`#edit-${item.id}`).value = item.text;
 
-    // Apply text direction based on language
-    const isRtl = RTL_LANGS.has(item.language || 'he');
+    // Apply text direction: translated output is always LTR (English)
+    const isRtl = RTL_LANGS.has(item.language || 'he') && !item.translated;
     const displayEl = div.querySelector(`#display-${item.id}`);
     const editEl = div.querySelector(`#edit-${item.id}`);
-    
+
     displayEl.style.direction = isRtl ? 'rtl' : 'ltr';
     displayEl.style.textAlign = isRtl ? 'right' : 'left';
     editEl.style.direction = isRtl ? 'rtl' : 'ltr';

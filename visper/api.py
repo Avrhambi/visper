@@ -42,6 +42,7 @@ def transcribe_chunked(
     is_aborted: Optional[Callable[[], bool]] = None,
     language: str = "he",
     initial_prompt: str = None,
+    task: str = "transcribe",
 ) -> str:
     """
     Like transcribe() but calls on_segment({"start", "end", "text"}) for each
@@ -68,7 +69,7 @@ def transcribe_chunked(
     engine = _get_router(config).get(language)
     result = engine.transcribe(source, bucket=resolved_bucket, on_segment=on_segment,
                                is_aborted=is_aborted, language=language,
-                               initial_prompt=initial_prompt)
+                               initial_prompt=initial_prompt, task=task)
     return result.text
 
 

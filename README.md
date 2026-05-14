@@ -1,4 +1,5 @@
-# וִויסְפֶּר — Local Speech-to-Text
+
+# Visper - Local transcription tool
 
 Offline speech-to-text on your own hardware. No cloud, no subscriptions, no data leaves your machine. Self-benchmarks and configures itself on first run.
 
@@ -65,9 +66,10 @@ Or double-click `start.bat` — it starts the server and opens the browser autom
 - Batch queue: sequential processing with per-file status, each result saved to library
 - Live microphone recording with real-time transcription
 - 12-language picker (Hebrew, English, Arabic, Russian, Spanish, French, German, Portuguese, Italian, Chinese, Japanese, Korean) with automatic model routing
+- **Translate to English** — one-click toggle for any non-English language; output is English regardless of source language
 - Initial prompt field — seed Whisper with names, terms, or context to improve accuracy
 - Transcription library saved locally in the browser; click any timestamp to seek audio
-- RTL layout for Hebrew and Arabic; LTR for all other languages
+- RTL layout for Hebrew and Arabic; LTR for all other languages and translated output
 
 ---
 
@@ -83,6 +85,8 @@ visper-file audio.mp3 --output json                        # JSON with segments,
 visper-file audio.mp3 --no-file --clip                     # print + copy to clipboard, no file written
 visper-file audio.mp3 --progress                           # print each segment as it is decoded
 visper-file audio.mp3 --language en                        # transcribe English
+visper-file audio.mp3 --language he --translate             # transcribe Hebrew, translate to English
+visper-file audio.mp3 --language ar --translate             # transcribe Arabic, translate to English
 visper-file audio.mp3 --prompt "team meeting, participants: Yossi, Rachel"  # initial prompt
 visper-file *.wav                                          # batch mode — all WAV files in current dir
 ```
@@ -92,6 +96,7 @@ visper-file *.wav                                          # batch mode — all 
 | `--output` | from config | `txt` / `srt` / `vtt` / `json` |
 | `--bucket` | `auto` | Force duration bucket: `short` / `medium` / `long` / `extended` |
 | `--language` | `he` | Language code — routes to the correct model automatically |
+| `--translate` | off | Translate audio to English (non-English languages only) |
 | `--prompt` | — | Seed Whisper with context: names, terms, topic. Use the same language as the audio |
 | `--progress` / `-p` | off | Print each segment to stderr as it decodes |
 | `--no-file` | off | Print to stdout only, don't write an output file |
@@ -141,8 +146,10 @@ The server exposes a full web UI and a REST/WebSocket API.
 ```bash
 # Quick API examples
 curl -F "file=@audio.mp3" -F "language=he" http://localhost:8000/transcribe
+curl -F "file=@audio.mp3" -F "language=he" -F "translate=1" http://localhost:8000/transcribe
 curl -F "file=@audio.mp3" -F "language=en" -F "initial_prompt=meeting notes" \
      http://localhost:8000/transcribe/stream
+# WebSocket live: ws://localhost:8000/ws/live?language=he&translate=1
 curl http://localhost:8000/health
 ```
 
