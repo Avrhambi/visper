@@ -24,6 +24,15 @@ python install.py
 
 Requires Python 3.10+ and [ffmpeg](https://ffmpeg.org) on PATH (WAV files work without it).
 
+**Platform support**
+
+| Platform | CPU | CUDA | OpenVINO |
+|----------|-----|------|----------|
+| Windows | ✅ | ✅ | ✅ |
+| Linux | ✅ | ✅ | manual setup |
+| macOS (Intel) | ✅ | — | — |
+| macOS (Apple Silicon) | untested | — | — |
+
 > **HuggingFace token:** If the model repo is gated, copy `.env.example` to `.env` and set `HF_TOKEN=hf_...` before running `install.py`.
 
 ---
