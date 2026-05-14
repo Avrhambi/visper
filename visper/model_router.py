@@ -14,28 +14,41 @@ from typing import Optional
 
 ROOT = Path(__file__).parent.parent
 
-# Built-in model assignments per language code
+# Built-in model assignments per language code (faster-whisper / CTranslate2)
 _DEFAULT_MODELS: dict[str, str] = {
     "he": "ivrit-ai/whisper-large-v3-turbo-ct2",   # Hebrew fine-tune — best Hebrew quality
     "en": "distil-whisper/distil-large-v3-ct2",    # English-only distil — ~6x faster than turbo
     "ar": "Systran/faster-whisper-large-v3",        # Full v3 — Arabic needs it, turbo degrades here
-    "_default": "Systran/faster-whisper-large-v3",         # All other languages
+    "_default": "Systran/faster-whisper-large-v3",  # All other languages
+}
+
+# MLX model assignments for Apple Silicon (mlx-community namespace)
+# ivrit-ai's Hebrew fine-tune has no MLX release — base turbo is used instead.
+_DEFAULT_MLX_MODELS: dict[str, str] = {
+    "he": "mlx-community/whisper-large-v3-turbo",      # base turbo — strong Hebrew
+    "en": "mlx-community/distil-whisper-large-v3-en",  # distil — ~6x faster, English-only
+    "ar": "mlx-community/whisper-large-v3",             # full v3 — Arabic needs it
+    "_default": "mlx-community/whisper-large-v3",       # Russian, Spanish, French, CJK, etc.
 }
 
 
-def _load_router_config() -> tuple[dict[str, str], str]:
+def _load_router_config(device: str = "") -> tuple[dict[str, str], str]:
     """Return (model_map, force_model) parsed from config.yaml in one read."""
     try:
         import yaml
         path = ROOT / "config.yaml"
         if path.exists():
             cfg = yaml.safe_load(path.read_text()) or {}
-            model_map = {**_DEFAULT_MODELS, **(cfg.get("models") or {})}
             force = cfg.get("force_model", "") or ""
+            if device == "mlx":
+                model_map = {**_DEFAULT_MLX_MODELS, **(cfg.get("models_mlx") or {})}
+            else:
+                model_map = {**_DEFAULT_MODELS, **(cfg.get("models") or {})}
             return model_map, force
     except Exception:
         pass
-    return dict(_DEFAULT_MODELS), ""
+    defaults = _DEFAULT_MLX_MODELS if device == "mlx" else _DEFAULT_MODELS
+    return dict(defaults), ""
 
 
 class ModelRouter:
@@ -52,10 +65,12 @@ class ModelRouter:
         self._transcriber = None
 
     def resolve_model_id(self, language: str) -> str:
-        model_map, force = _load_router_config()
+        device = self._hw.get("device", "")
+        model_map, force = _load_router_config(device)
         if force:
             return force
-        return model_map.get(language, model_map.get("_default", _DEFAULT_MODELS["_default"]))
+        defaults = _DEFAULT_MLX_MODELS if device == "mlx" else _DEFAULT_MODELS
+        return model_map.get(language, model_map.get("_default", defaults["_default"]))
 
     def get(self, language: str) -> object:
         from visper.transcriber import Transcriber

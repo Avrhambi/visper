@@ -77,11 +77,16 @@ def health():
         from visper.api import _router
         cfg = get_best_config("medium")
         model = _router._active_model_id if _router else None
+        device = cfg.get("device")
+        # Hebrew fine-tune (ivrit-ai CT2) is transcription-only — translation output is poor.
+        # On MLX (Apple Silicon) the base turbo model is used, which translates fine.
+        no_translate = [] if device == "mlx" else ["he"]
         return {
             "status": "ok",
-            "device": cfg.get("device"),
+            "device": device,
             "compute_type": cfg.get("compute_type"),
             "model": model,
+            "no_translate": no_translate,
         }
     except Exception as e:
         return {"status": "error", "error": str(e)}

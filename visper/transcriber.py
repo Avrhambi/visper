@@ -203,6 +203,8 @@ class Transcriber:
         device = config.get("device", "cpu")
         if device == "openvino":
             return f"OpenVINO {config.get('openvino_device', 'CPU')}"
+        if device == "mlx":
+            return "MLX (Apple Silicon)"
         return f"{device.upper()} {config.get('compute_type', '')}"
 
     def _load_backend(self, config: dict):
@@ -234,6 +236,15 @@ class Transcriber:
                 str(ov_model_dir),
                 device=config.get("openvino_device", "CPU"),
             )
+        elif device == "mlx":
+            try:
+                import mlx_whisper  # noqa: F401 — verify installed; model loaded on first call
+            except ImportError:
+                raise RuntimeError(
+                    "mlx-whisper is not installed. "
+                    "Install it with: pip install mlx-whisper"
+                )
+            return None  # mlx-whisper caches models internally; no persistent object needed
         else:
             raise RuntimeError(f"Unknown device in config: {device!r}")
 
@@ -386,12 +397,65 @@ class Transcriber:
                     {"start": c.timestamps.begin, "end": c.timestamps.end, "text": c.text}
                     for c in result.chunks
                 ]
+
+        elif self._backend_type == "mlx":
+            import mlx_whisper as _mlx
+            if isinstance(source, np.ndarray):
+                audio_input = source
+                audio_duration = len(source) / 16000.0
+            else:
+                audio_input = str(source)
+                audio_duration = self._get_duration(source)
+
+            # Apply audio preprocessing if configured (not for streaming)
+            if (self._denoise or self._normalize_volume or self._highpass) and bucket != "streaming":
+                arr = audio_input if isinstance(audio_input, np.ndarray) else self._to_array(source)
+                if self._normalize_volume:
+                    arr = self._normalize_audio_volume(arr)
+                if self._highpass:
+                    arr = self._highpass_filter(arr)
+                if self._denoise:
+                    arr = self._denoise_audio(arr)
+                audio_input = arr
+                audio_duration = len(arr) / 16000.0
+
+            _beam = params.beam_size if params.beam_size > 0 else 1
+            _temp = params.temperature
+            _temp0 = _temp[0] if hasattr(_temp, "__iter__") else float(_temp)
+
+            mlx_result = _mlx.transcribe(
+                audio_input,
+                path_or_hf_repo=self._model_id,
+                language=_lang,
+                task=task,
+                beam_size=_beam,
+                temperature=_temp0,
+                initial_prompt=initial_prompt or None,
+            )
+            text = (mlx_result.get("text") or "").strip()
+            raw_segs = mlx_result.get("segments") or []
+            segments = [
+                {"start": s["start"], "end": s["end"], "text": s["text"],
+                 "confidence": round(float(s.get("avg_logprob", 0.0)), 3)}
+                for s in raw_segs
+            ]
+            if on_segment:
+                for seg in segments:
+                    on_segment(seg)
+            from visper.postprocess import normalize_text
+            text = normalize_text(text, "en" if task == "translate" else _lang)
+
         else:
             raise RuntimeError(f"Unknown backend: {self._backend_type}")
 
         elapsed = time.time() - t0
         rtf = elapsed / audio_duration if audio_duration > 0 else 0.0
 
+        _backend_label = (
+            "faster-whisper" if self._backend_type in ("cpu", "cuda")
+            else "mlx-whisper" if self._backend_type == "mlx"
+            else "openvino_genai"
+        )
         return TranscriptResult(
             text=text,
             segments=segments,
@@ -399,7 +463,7 @@ class Transcriber:
             elapsed=round(elapsed, 3),
             rtf=round(rtf, 4),
             config_label=self._config_label,
-            backend="faster-whisper" if self._backend_type in ("cpu", "cuda") else "openvino_genai",
+            backend=_backend_label,
             tier_used=params.tier_used,
             whisper_params=params.as_transcribe_kwargs(),
         )

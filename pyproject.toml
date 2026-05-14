@@ -30,6 +30,7 @@ server = [
     "sse-starlette",
     "python-multipart",
 ]
+mlx = ["mlx-whisper"]
 
 [project.scripts]
 visper-file      = "visper._cli:file"

@@ -55,6 +55,7 @@ ROOT = Path(__file__).parent.parent
 RESULTS_PATH = ROOT / "benchmark_results.json"
 RECORDS_DIR  = ROOT / "records"
 MODEL_ID     = "ivrit-ai/whisper-large-v3-turbo-ct2"
+MLX_MODEL_ID = "mlx-community/whisper-large-v3-turbo"  # benchmark uses Hebrew base turbo
 SAMPLE_RATE  = 16_000
 
 CANONICAL_FILE = "school.mp3"   # sliced for all buckets
@@ -319,6 +320,18 @@ def _get_hardware_candidates(hw_info: dict = None, mode: str = "smart") -> list[
     except ImportError:
         pass
 
+    # ── Apple Silicon (MLX) ───────────────────────────────────────────────────
+    if hw_info.get("mlx_available"):
+        candidates.append({
+            "device":       "mlx",
+            "model_id":     MLX_MODEL_ID,
+            "compute_type": "mlx",
+            "cpu_threads":  4,
+            "num_workers":  1,
+            "omp_threads":  4,
+            "label":        f"MLX {MLX_MODEL_ID.split('/')[-1]}",
+        })
+
     return candidates
 
 
@@ -383,6 +396,18 @@ def _build_fallback_chain(hw_info: dict) -> tuple[dict, list[dict]]:
         "cpu_threads": cpu_threads, "num_workers": 1, "omp_threads": cpu_threads,
         "label": f"CT2 CPU int8 t{cpu_threads}w1",
     })
+
+    # 4. Apple Silicon MLX — prepend as primary if available (Neural Engine throughput)
+    if hw_info.get("mlx_available"):
+        chain.insert(0, {
+            "device":       "mlx",
+            "model_id":     MLX_MODEL_ID,
+            "compute_type": "mlx",
+            "cpu_threads":  4,
+            "num_workers":  1,
+            "omp_threads":  4,
+            "label":        f"MLX {MLX_MODEL_ID.split('/')[-1]}",
+        })
 
     if not chain:
         # Absolute fallback — should never happen
@@ -575,7 +600,16 @@ def _estimate_config_heuristic(hw_info: dict) -> dict[str, Optional[dict]]:
         and hw_info.get("gpu_vram_mb", 0) >= _CUDA_MIN_VRAM_MB
     )
 
-    if cuda_ok:
+    if hw_info.get("mlx_available"):
+        base: dict = {
+            "device":       "mlx",
+            "model_id":     MLX_MODEL_ID,
+            "compute_type": "mlx",
+            "cpu_threads":  4,
+            "num_workers":  1,
+            "omp_threads":  4,
+        }
+    elif cuda_ok:
         # int8_float16 requires tensor cores (4GB+ GPUs); entry-level cards
         # like MX350 (2GB) use int8_float32. Bare int8 hangs on 2GB VRAM.
         vram_mb = hw_info.get("gpu_vram_mb", 0)
@@ -635,7 +669,7 @@ def _register_cuda_dlls() -> None:
 
 
 def _load_model(candidate: dict):
-    omp = str(candidate.get("omp_threads", candidate["cpu_threads"]))
+    omp = str(candidate.get("omp_threads", candidate.get("cpu_threads", 4)))
     os.environ["OMP_NUM_THREADS"] = omp
     os.environ["MKL_NUM_THREADS"] = omp
 
@@ -662,6 +696,9 @@ def _load_model(candidate: dict):
         return ov_genai.WhisperPipeline(
             str(ov_model_dir), device=candidate.get("openvino_device", "CPU")
         )
+    elif device == "mlx":
+        import mlx_whisper
+        return mlx_whisper  # module acts as the loader; model is cached on first call
     raise RuntimeError(f"Unknown device: {device!r}")
 
 
@@ -676,6 +713,16 @@ def _transcribe_model(model, audio: np.ndarray, candidate: dict) -> str:
         cfg.language = "<|he|>"
         result = model.generate(audio, cfg)
         return result.texts[0].strip() if result.texts else ""
+    elif device == "mlx":
+        # model is the mlx_whisper module; first call downloads and caches the model
+        result = model.transcribe(
+            audio,
+            path_or_hf_repo=candidate.get("model_id", MLX_MODEL_ID),
+            language="he",
+            task="transcribe",
+            beam_size=1,
+        )
+        return (result.get("text") or "").strip()
     return ""
 
 
@@ -925,6 +972,14 @@ def _collect_hardware_info() -> dict:
     except ImportError:
         pass
 
+    import platform
+    mlx_available = (sys.platform == "darwin" and platform.machine() == "arm64")
+    if mlx_available:
+        try:
+            import mlx_whisper  # noqa: F401
+        except ImportError:
+            mlx_available = False
+
     return {
         "cpu":                   cpu_name,
         "logical_cores":         logical_cores,
@@ -936,6 +991,7 @@ def _collect_hardware_info() -> dict:
         "openvino_available":    openvino_available,
         "openvino_devices":      openvino_devices,
         "openvino_device_names": openvino_device_names,
+        "mlx_available":         mlx_available,
     }
 
 

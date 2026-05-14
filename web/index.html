@@ -797,11 +797,12 @@
       background: white;
       border: 1px solid var(--border);
       border-radius: 999px;
-      padding: 0 4px;
-      height: 60px;
+      padding: 0 2px;
+      height: 62px;
       box-shadow: var(--shadow-sm);
       transition: var(--transition);
       direction: rtl;
+      flex-shrink: 0;
     }
     .lang-translation-container:hover {
       border-color: var(--text-muted);
@@ -811,10 +812,10 @@
       background: transparent;
       border: none;
       border-radius: 999px;
-      padding: 0 1rem;
-      min-width: 110px;
-      height: 52px;
-      font-size: 0.875rem;
+      padding: 0 0.5rem;
+      min-width: 75px;
+      height: 54px;
+      font-size: 0.8125rem;
       font-weight: 700;
       color: var(--text);
       cursor: pointer;
@@ -824,22 +825,23 @@
       direction: rtl;
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      gap: 8px;
+      justify-content: center;
+      gap: 4px;
     }
     .lang-select:hover { background: var(--bg); }
     
     .target-select {
-      min-width: 100px;
+      min-width: 70px;
     }
 
     .lang-arrow {
-      color: var(--text-muted);
+      color: var(--text);
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 0 4px;
-      opacity: 0.6;
+      padding: 0 2px;
+      opacity: 0.8;
+      width: 22px;
     }
 
     .lang-tier-header {
@@ -917,7 +919,7 @@
   <div class="nav-container">
     <div class="nav-tabs">
       <button id="tabBtnCreate" class="nav-tab active" onclick="showTab('create')">
-        <i data-lucide="plus-circle"></i> יצירה חדשה
+        <i data-lucide="plus-circle"></i> הקלטה חדשה
       </button>
       <button id="tabBtnLibrary" class="nav-tab" onclick="showTab('library')">
         <i data-lucide="library"></i> הספרייה שלי
@@ -932,7 +934,7 @@
       <div class="segmented-control">
         <div id="glider" class="segmented-glider glider-file"></div>
         <button id="btnModeFile" class="active" onclick="switchCreateMode('file')">קובץ</button>
-        <button id="btnModeLive" onclick="switchCreateMode('live')">הקלטה</button>
+        <button id="btnModeLive" onclick="switchCreateMode('live')">לייב</button>
       </div>
     </div>
 
@@ -948,21 +950,16 @@
               <span id="sourceLangText">עברית</span>
               <i data-lucide="chevron-down" size="14" style="opacity: 0.5;"></i>
             </button>
-            <div id="sourceLangMenu" class="dl-menu lang-menu tiered-menu">
-              <div class="lang-tier-header">בסיס</div>
+            <div id="sourceLangMenu" class="dl-menu lang-menu">
               <button class="dl-option" onclick="setSourceLanguage('he')">עברית</button>
               <button class="dl-option" onclick="setSourceLanguage('en')">אנגלית</button>
               <button class="dl-option" onclick="setSourceLanguage('ar')">ערבית</button>
-              
-              <div class="lang-tier-header">אירופה</div>
               <button class="dl-option" onclick="setSourceLanguage('ru')">רוסית</button>
               <button class="dl-option" onclick="setSourceLanguage('es')">ספרדית</button>
               <button class="dl-option" onclick="setSourceLanguage('fr')">צרפתית</button>
               <button class="dl-option" onclick="setSourceLanguage('de')">גרמנית</button>
               <button class="dl-option" onclick="setSourceLanguage('it')">איטלקית</button>
               <button class="dl-option" onclick="setSourceLanguage('pt')">פורטוגזית</button>
-              
-              <div class="lang-tier-header">אסיה</div>
               <button class="dl-option" onclick="setSourceLanguage('zh')">סינית</button>
               <button class="dl-option" onclick="setSourceLanguage('ja')">יפנית</button>
               <button class="dl-option" onclick="setSourceLanguage('ko')">קוריאנית</button>
@@ -971,7 +968,7 @@
 
           <!-- Directional Arrow (RTL aware) -->
           <div class="lang-arrow">
-            <i data-lucide="arrow-left" size="14"></i>
+            <i data-lucide="arrow-left" size="18" stroke-width="2.5"></i>
           </div>
 
           <!-- Target Language Selector -->
@@ -1090,6 +1087,9 @@
   let _fileCancelled = false;
   let selectedLanguage = 'he';
   let translateToEn = false;
+  // Languages where translation is blocked — populated from /health.
+  // Default to blocking Hebrew until server confirms (fine-tune model on Windows/Linux).
+  let noTranslateLangs = new Set(['he']);
   let fileList = [];
   let fileQueueIndex = 0;
   let initialPrompt = '';
@@ -1142,29 +1142,38 @@
     menu.classList.toggle('open');
   }
 
+  function _refreshTranslateAvailability() {
+    const canTranslate = selectedLanguage !== 'en' && !noTranslateLangs.has(selectedLanguage);
+    const optTargetEn = document.getElementById('optTargetEn');
+    const targetBtn   = document.getElementById('targetLangBtn');
+    const targetTxt   = document.getElementById('targetLangText');
+    if (canTranslate) {
+      if (optTargetEn) optTargetEn.style.display = 'block';
+      if (targetBtn) { targetBtn.disabled = false; targetBtn.style.opacity = '1'; targetBtn.style.cursor = 'pointer'; }
+    } else {
+      if (optTargetEn) optTargetEn.style.display = 'none';
+      if (translateToEn) {
+        translateToEn = false;
+        if (targetTxt) targetTxt.textContent = LANG_LABELS[selectedLanguage] || selectedLanguage;
+        _applyLanguageToggle(selectedLanguage);
+      }
+      if (targetBtn) { targetBtn.disabled = true; targetBtn.style.opacity = '0.7'; targetBtn.style.cursor = 'default'; }
+    }
+  }
+
   function setSourceLanguage(lang) {
     selectedLanguage = lang;
     translateToEn = false;
-    
-    // Update Source Button Text
+
     const sourceTxt = document.getElementById('sourceLangText');
     if (sourceTxt) sourceTxt.textContent = LANG_LABELS[lang] || lang;
 
-    // Update Target Options
     const optTargetSource = document.getElementById('optTargetSource');
-    const optTargetEn = document.getElementById('optTargetEn');
-    const targetTxt = document.getElementById('targetLangText');
-
+    const targetTxt       = document.getElementById('targetLangText');
     if (optTargetSource) optTargetSource.textContent = LANG_LABELS[lang] || lang;
     if (targetTxt) targetTxt.textContent = LANG_LABELS[lang] || lang;
 
-    if (lang === 'en') {
-      if (optTargetEn) optTargetEn.style.display = 'none';
-      // If source is English, Target selector is basically just showing English
-    } else {
-      if (optTargetEn) optTargetEn.style.display = 'block';
-    }
-
+    _refreshTranslateAvailability();
     _applyLanguageToggle(lang);
     document.getElementById('sourceLangMenu').classList.remove('open');
   }
@@ -1244,13 +1253,16 @@
       const text = document.getElementById('healthText');
       const isOk = d.status === "ok";
       dot.className = isOk ? "status-dot ok" : "status-dot err";
-      
+
       const btnAll = document.getElementById('btnTranscribeAll');
       if (btnAll) btnAll.disabled = !isOk;
-      
+
       if (isOk) {
         const modelShort = d.model ? d.model.split('/').pop() : null;
         text.textContent = modelShort ? `${d.device} · ${modelShort}` : `מנוע פעיל: ${d.device}`;
+        // Update which languages block translation, then refresh the translate UI
+        noTranslateLangs = new Set(Array.isArray(d.no_translate) ? d.no_translate : ['he']);
+        _refreshTranslateAvailability();
       } else {
         text.textContent = "שגיאת מנוע";
       }

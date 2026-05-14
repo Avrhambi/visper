@@ -26,12 +26,27 @@ Requires Python 3.10+ and [ffmpeg](https://ffmpeg.org) on PATH (WAV files work w
 
 **Platform support**
 
-| Platform | CPU | CUDA | OpenVINO |
-|----------|-----|------|----------|
-| Windows | ✅ | ✅ | ✅ |
-| Linux | ✅ | ✅ | manual setup |
-| macOS (Intel) | ✅ | — | — |
-| macOS (Apple Silicon) | untested | — | — |
+| Platform | CPU | CUDA | OpenVINO (Intel iGPU) | MLX (Apple Silicon) |
+|----------|-----|------|-----------------------|---------------------|
+| Windows | ✅ | ✅ | ✅ | — |
+| Linux | ✅ | ✅ | ✅ needs GPU drivers | — |
+| macOS (Intel) | ✅ | — | — | — |
+| macOS (Apple Silicon) | ✅ | — | — | ✅ |
+
+**Per-platform notes**
+
+- **Windows** — fully automatic. `install.py` handles everything: Python packages, CUDA libraries, and the hardware benchmark. Intel iGPU is detected automatically via OpenVINO.
+
+- **Linux** — CPU and CUDA work out of the box. To use an Intel iGPU via OpenVINO, install the Intel compute runtime first (one-time, before `install.py`):
+  ```bash
+  sudo apt install intel-opencl-icd level-zero intel-level-zero-gpu
+  sudo usermod -aG video,render $USER   # then re-login
+  ```
+  Without this, OpenVINO falls back to its CPU path automatically — nothing breaks, just slower.
+
+- **macOS (Intel)** — CPU only. `install.py` works as-is. No GPU acceleration available.
+
+- **macOS (Apple Silicon)** — `install.py` detects the M-series chip and installs `mlx-whisper` automatically. This uses the Neural Engine / GPU for fast inference. Note: the Hebrew fine-tune (`ivrit-ai`) has no MLX release; the base `whisper-large-v3-turbo` is used instead — quality is strong but not specifically fine-tuned for Hebrew.
 
 > **HuggingFace token:** If the model repo is gated, copy `.env.example` to `.env` and set `HF_TOKEN=hf_...` before running `install.py`.
 

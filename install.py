@@ -223,6 +223,19 @@ def install_requirements():
     )
     print(f"[Setup] Server extras done ({time.time() - t1:.0f}s)")
 
+    import platform as _platform
+    if sys.platform == "darwin" and _platform.machine() == "arm64":
+        print("[Setup] Apple Silicon detected — installing mlx-whisper...")
+        t1 = time.time()
+        _run_with_progress(
+            label="Installing mlx-whisper",
+            cmd=[sys.executable, "-m", "pip", "install", "mlx-whisper", "-q"],
+            estimated_seconds=20
+        )
+        print(f"[Setup] mlx-whisper done ({time.time() - t1:.0f}s)")
+        print("\n[Setup] All requirements satisfied.\n")
+        return "apple_silicon"
+
     print("\n[Setup] Detecting GPU...")
     tier = check_and_fix_cuda()
 

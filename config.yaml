@@ -128,6 +128,17 @@ models:
 # Set to a model ID to force one model for all languages (useful for code-switching).
 force_model: ""
 
+# ══ APPLE SILICON — MLX model routing ════════════════════════════════════════
+# Used automatically on macOS Apple Silicon (M1/M2/M3/M4). mlx-whisper loads
+# these from Hugging Face and caches them in ~/.cache/huggingface/.
+# Note: ivrit-ai's Hebrew fine-tune has no MLX release — the base turbo model
+# is used instead. Quality is excellent but not fine-tuned specifically for Hebrew.
+models_mlx:
+  he:       mlx-community/whisper-large-v3-turbo   # base turbo — strong Hebrew, no fine-tune
+  en:       mlx-community/distil-whisper-large-v3-en  # distil — ~6x faster, English-only
+  ar:       mlx-community/whisper-large-v3         # full v3 — Arabic needs it
+  _default: mlx-community/whisper-large-v3         # Russian, Spanish, French, CJK, etc.
+
 # Hotwords: comma-separated list of words/phrases to bias Whisper toward.
 # Use for domain-specific terms, proper nouns, or brand names Whisper mishears.
 hotwords: ""
