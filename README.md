@@ -36,9 +36,11 @@ visper-server          # starts the API on http://localhost:8000
 
 Then open `web/index.html` in your browser. The page connects to `localhost:8000` automatically.
 
-| File upload | Live recording | Library |
-|:-----------:|:--------------:|:-------:|
-| ![File upload](screenshots/file-upload.png) | ![Live recording](screenshots/live-recording.png) | ![Library](screenshots/library.png) |
+![File upload](screenshots/file-upload.png)
+
+![Live recording](screenshots/live-recording.png)
+
+![Library](screenshots/library.png)
 
 **Features:**
 - Upload single or multiple audio files (MP3, WAV, M4A, and more) — or a whole folder
