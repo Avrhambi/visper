@@ -39,7 +39,11 @@ Language routing selects the right model per request: Hebrew fine-tune (`ivrit-a
 ## Web UI
 
 ```bash
-visper-server          # starts on http://localhost:8000
+# First time only — installs deps, downloads model (~1.5 GB), runs hardware benchmark
+python install.py
+
+# Every run after that
+visper-server          # opens http://localhost:8000
 ```
 
 **Features:**
