@@ -42,6 +42,9 @@ class TranscriptResult:
     backend: str
     tier_used: str
     whisper_params: dict
+    # Set only for a two-stage Hebrew->English translation: the original Hebrew
+    # transcript, so a bilingual view is possible. Empty otherwise.
+    he_text: str = ""
 
 
 class Transcriber:
@@ -291,6 +294,21 @@ class Transcriber:
         from visper.params import get_params
 
         _lang = language if language is not None else self._language
+
+        # Two-stage Hebrew -> English: the ivrit-ai fine-tune is a transcription
+        # specialist and translates poorly, so transcribe in Hebrew and run a
+        # dedicated he->en MT pass over the segments. Falls through to Whisper's
+        # own translate task when the MT model isn't available.
+        if task == "translate" and _lang == "he":
+            from visper.translate import get_hebrew_english_translator
+            _mt = get_hebrew_english_translator()
+            if _mt is not None:
+                return self._translate_hebrew(
+                    source, bucket, _mt, on_segment=on_segment,
+                    _tier_override=_tier_override, is_aborted=is_aborted,
+                    initial_prompt=initial_prompt,
+                )
+
         params = _tier_override if _tier_override is not None else get_params(bucket, self._config)
 
         vad_filter = self._vad_filter
@@ -476,6 +494,60 @@ class Transcriber:
             backend=_backend_label,
             tier_used=params.tier_used,
             whisper_params=params.as_transcribe_kwargs(),
+        )
+
+    def _translate_hebrew(self, source, bucket: str, mt, *,
+                          on_segment: Optional[Callable[[dict], None]] = None,
+                          _tier_override=None,
+                          is_aborted: Optional[Callable[[], bool]] = None,
+                          initial_prompt: Optional[str] = None) -> TranscriptResult:
+        """Stage 2: Hebrew transcription, then a he->en MT pass over the segments.
+
+        Runs stage 1 with ``on_segment`` withheld — the callbacks fire here,
+        once per *English* segment, so a caller's streamed segments and the
+        final ``text`` are the same language. The stage-1 Whisper decode is
+        therefore silent; the MT pass is a small fraction of ASR time.
+        """
+        t0 = time.time()
+        he = self.transcribe(
+            source, bucket=bucket, on_segment=None, _tier_override=_tier_override,
+            is_aborted=is_aborted, language="he", initial_prompt=initial_prompt,
+            task="transcribe",
+        )
+
+        from visper.postprocess import normalize_text
+        segments = he.segments or []
+        en_texts = mt.translate([s.get("text", "") for s in segments]) if segments else []
+
+        new_segments: list = []
+        for s, en in zip(segments, en_texts):
+            seg = dict(s)
+            seg["he_text"] = s.get("text", "")
+            seg["text"] = normalize_text(en, "en")
+            new_segments.append(seg)
+            if on_segment is not None:
+                on_segment(seg)
+
+        if new_segments:
+            text = " ".join(s["text"] for s in new_segments if s["text"]).strip()
+        elif he.text:
+            text = normalize_text(mt.translate([he.text])[0], "en")
+        else:
+            text = ""
+
+        elapsed = time.time() - t0
+        rtf = elapsed / he.audio_duration if he.audio_duration > 0 else 0.0
+        return TranscriptResult(
+            text=text,
+            segments=new_segments,
+            audio_duration=he.audio_duration,
+            elapsed=round(elapsed, 3),
+            rtf=round(rtf, 4),
+            config_label=he.config_label,
+            backend=f"{he.backend}+opus-mt-he-en",
+            tier_used=he.tier_used,
+            whisper_params=he.whisper_params,
+            he_text=he.text,
         )
 
     def _transcribe_via_worker(
