@@ -604,9 +604,9 @@ def _estimate_config_heuristic(hw_info: dict) -> dict[str, Optional[dict]]:
     Used by quick mode and when skip_benchmark=true in config.yaml.
     All results carry status="estimated" so callers can distinguish from timed runs.
 
-    CUDA is only chosen when VRAM >= _CUDA_MIN_VRAM_MB (3 GB). Entry-level
-    cards like MX350 (2 GB) fail or hang loading large-v3-turbo — benchmark
-    evidence from i5-1135G7 / MX350 machine confirmed this.
+    CUDA is only chosen when VRAM >= _CUDA_MIN_VRAM_MB. On 2 GB cards (MX350)
+    int8_float32 loads and runs; bare int8 hangs — confirmed on the
+    i5-1135G7 / MX350 machine — so compute_type is picked accordingly below.
 
     For AVX2 CPUs, 2 threads outperforms physical core count because the
     model is memory-bandwidth bound; adding threads increases contention.
