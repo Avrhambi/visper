@@ -258,6 +258,16 @@ class Transcriber:
         weighted = sum(s.avg_logprob * max(s.end - s.start, 0.01) for s in seg_list)
         return (weighted / total_weight) >= threshold
 
+    @staticmethod
+    def _confidence_ok_dicts(segments: list, threshold: float) -> bool:
+        """Same check as _confidence_ok but over the worker's segment dicts
+        ({'start','end','confidence'} where confidence is the rounded avg_logprob)."""
+        if not segments:
+            return True
+        total_weight = sum(max(s["end"] - s["start"], 0.01) for s in segments)
+        weighted = sum(s.get("confidence", 0.0) * max(s["end"] - s["start"], 0.01) for s in segments)
+        return (weighted / total_weight) >= threshold
+
     def transcribe(
         self,
         source: Union[str, Path, np.ndarray],
@@ -474,77 +484,101 @@ class Transcriber:
         initial_prompt: str = None,
         task: str = "transcribe",
     ) -> TranscriptResult:
-        """Send a transcription request to the venv worker subprocess."""
-        t0 = time.time()
-        temp_npy: Optional[str] = None
+        """Send a transcription request to the venv worker subprocess.
 
+        Feature parity with the in-process path — these used to be applied only
+        when the model ran in-process, so the default (venv-worker) runtime
+        silently skipped them: audio pre-processing (denoise / highpass /
+        normalize), hotwords, initial_prompt, task=translate, confidence-gated
+        retry, and the Hebrew post-normalization pass.
+        """
+        t0 = time.time()
+        _lang = language if language is not None else self._language
+
+        if is_aborted is not None and is_aborted():
+            return TranscriptResult(
+                text="", segments=[], audio_duration=0.0, elapsed=0.0, rtf=0.0,
+                config_label=self._config_label,
+                backend=f"venv-worker/{self._backend_type}",
+                tier_used=params.tier_used,
+                whisper_params=params.as_transcribe_kwargs(),
+            )
+
+        # ── Audio pre-processing (array path only, never for streaming) ──
+        preprocess = (self._denoise or self._normalize_volume or self._highpass) and bucket != "streaming"
+        audio_arr: Optional[np.ndarray] = None
         if isinstance(source, np.ndarray):
-            # Write numpy array to a temp file the worker can read
+            audio_arr = source.astype(np.float32)
+        elif preprocess:
+            audio_arr = self._to_array(source)
+        if preprocess and audio_arr is not None:
+            if self._normalize_volume:
+                audio_arr = self._normalize_audio_volume(audio_arr)
+            if self._highpass:
+                audio_arr = self._highpass_filter(audio_arr)
+            if self._denoise:
+                audio_arr = self._denoise_audio(audio_arr)
+
+        if audio_arr is not None:
             fd, temp_npy = tempfile.mkstemp(suffix=".npy")
             os.close(fd)
-            np.save(temp_npy, source.astype(np.float32))
-            audio_path = temp_npy
-            fallback_duration = len(source) / 16000.0
+            np.save(temp_npy, audio_arr.astype(np.float32))
+            audio_path: str = temp_npy
+            fallback_duration = len(audio_arr) / 16000.0
         else:
+            temp_npy = None
             audio_path = str(source)
             fallback_duration = self._get_duration(source)
 
-        _lang = language if language is not None else self._language
-        kwargs = params.as_transcribe_kwargs()
-        kwargs["language"] = _lang
-        kwargs["language_token"] = f"<|{_lang}|>"
-        if task == "translate":
-            kwargs["task"] = "translate"
-        if initial_prompt:
-            kwargs["initial_prompt"] = initial_prompt
-        kwargs["vad_filter"] = vad_filter
-        kwargs["vad_parameters"] = dict(
-            min_silence_duration_ms=vad_min_silence_ms,
-            speech_pad_ms=vad_speech_pad_ms,
-        )
+        def _build_kwargs(p) -> dict:
+            kw = p.as_transcribe_kwargs()
+            kw["language"] = _lang
+            kw["language_token"] = f"<|{_lang}|>"
+            if task == "translate":
+                kw["task"] = "translate"
+            if initial_prompt:
+                kw["initial_prompt"] = initial_prompt
+            if self._hotwords:
+                kw["hotwords"] = self._hotwords
+            kw["vad_filter"] = vad_filter
+            kw["vad_parameters"] = dict(
+                min_silence_duration_ms=vad_min_silence_ms,
+                speech_pad_ms=vad_speech_pad_ms,
+            )
+            return kw
 
-        request = json.dumps({
-            "action":     "transcribe",
-            "audio_path": audio_path,
-            "params":     kwargs,
-            "bucket":     bucket,
-        })
+        kwargs = _build_kwargs(params)
+        response = self._worker_roundtrip(audio_path, kwargs, bucket, temp_npy)
 
-        try:
-            self._worker_proc.stdin.write(request + "\n")
-            self._worker_proc.stdin.flush()
-            response_line = self._worker_proc.stdout.readline()
-        except Exception as e:
-            if temp_npy:
-                try:
-                    Path(temp_npy).unlink()
-                except Exception:
-                    pass
-            raise RuntimeError(f"Worker communication error: {e}") from e
-
-        # Worker deletes the .npy file itself; clean up here only on error path
-        if not response_line:
-            if temp_npy:
-                try:
-                    Path(temp_npy).unlink()
-                except Exception:
-                    pass
-            raise RuntimeError("Worker closed stdout unexpectedly")
-
-        try:
-            response = json.loads(response_line.strip())
-        except json.JSONDecodeError as e:
-            raise RuntimeError(f"Worker returned invalid JSON: {e}") from e
-
-        if response.get("status") != "ok":
-            raise RuntimeError(f"Worker error: {response.get('error', 'unknown')}")
+        # ── Confidence-gated retry (parent-side: re-send at the next tier) ──
+        segs = response.get("segments", [])
+        if (params.confidence_retry_enabled and bucket != "streaming" and segs
+                and not self._confidence_ok_dicts(segs, params.log_prob_threshold)
+                and not (is_aborted is not None and is_aborted())):
+            from visper.params import next_tier, get_params_for_tier
+            upgrade = next_tier(params.tier_used)
+            if upgrade:
+                print(f"[STT] Low confidence — retrying at '{upgrade}' tier (worker)", file=sys.stderr)
+                params = get_params_for_tier(upgrade, bucket, self._config)
+                retry_path, retry_npy = audio_path, None
+                if temp_npy is not None:
+                    # worker already unlinked the first .npy — write a fresh one
+                    src_arr = audio_arr if audio_arr is not None else self._to_array(source)
+                    fd, retry_npy = tempfile.mkstemp(suffix=".npy")
+                    os.close(fd)
+                    np.save(retry_npy, src_arr.astype(np.float32))
+                    retry_path = retry_npy
+                response = self._worker_roundtrip(retry_path, _build_kwargs(params), bucket, retry_npy)
 
         elapsed = time.time() - t0
-        audio_duration = response.get("audio_duration", fallback_duration)
+        audio_duration = response.get("audio_duration", fallback_duration) or 0.0
         rtf = elapsed / audio_duration if audio_duration > 0 else 0.0
 
+        from visper.postprocess import normalize_text
+        text = normalize_text(response.get("text", ""), "en" if task == "translate" else _lang)
+
         return TranscriptResult(
-            text=response["text"],
+            text=text,
             segments=response.get("segments", []),
             audio_duration=audio_duration,
             elapsed=round(elapsed, 3),
@@ -554,6 +588,42 @@ class Transcriber:
             tier_used=params.tier_used,
             whisper_params=kwargs,
         )
+
+    def _worker_roundtrip(self, audio_path: str, kwargs: dict, bucket: str,
+                          temp_npy: Optional[str]) -> dict:
+        """One request/response with the worker. The worker unlinks a .npy it
+        was handed on success; this cleans it up on every error path."""
+        def _cleanup():
+            if temp_npy:
+                try:
+                    Path(temp_npy).unlink()
+                except Exception:
+                    pass
+
+        request = json.dumps({
+            "action": "transcribe", "audio_path": audio_path,
+            "params": kwargs, "bucket": bucket,
+        })
+        try:
+            self._worker_proc.stdin.write(request + "\n")
+            self._worker_proc.stdin.flush()
+            response_line = self._worker_proc.stdout.readline()
+        except Exception as e:
+            _cleanup()
+            raise RuntimeError(f"Worker communication error: {e}") from e
+
+        if not response_line:
+            _cleanup()
+            raise RuntimeError("Worker closed stdout unexpectedly")
+        try:
+            response = json.loads(response_line.strip())
+        except json.JSONDecodeError as e:
+            _cleanup()
+            raise RuntimeError(f"Worker returned invalid JSON: {e}") from e
+        if response.get("status") != "ok":
+            _cleanup()
+            raise RuntimeError(f"Worker error: {response.get('error', 'unknown')}")
+        return response
 
     def _resolve_source(self, source) -> Union[np.ndarray, str]:
         """For faster-whisper: arrays pass through; paths pass through as strings."""
