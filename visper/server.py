@@ -44,7 +44,9 @@ def _register_cuda_dlls() -> None:
 
 _register_cuda_dlls()
 
-app = FastAPI(title="Hebrew STT", version="0.2.0")
+from visper import __version__ as _visper_version
+
+app = FastAPI(title="Visper", version=_visper_version)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 async def _save_upload(file: UploadFile) -> pathlib.Path:

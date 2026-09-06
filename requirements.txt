@@ -1,14 +1,23 @@
-faster-whisper
-sounddevice
-numpy
-tqdm
-pyperclip
-mutagen
-soundfile
-pyyaml
-py-cpuinfo
-psutil                  # optional — enables RAM monitoring; skips checks silently if missing
-webrtcvad-wheels        # optional — better VAD on Windows; fallback to energy threshold
-noisereduce             # optional — audio denoising before transcription (audio_denoise: true in config.yaml)
-librosa                 # audio resampling (to_array, file streaming)
-scipy                   # highpass filter (audio_highpass: true in config.yaml)
+# Runtime dependencies. Mirrors [project.dependencies] + [server] in pyproject.toml.
+# For a reproducible deployment, freeze a resolved set:  pip freeze > requirements.lock
+
+# ── Core ─────────────────────────────────────────────────────────────────────
+faster-whisper>=1.0
+sounddevice>=0.4
+numpy>=1.24
+tqdm>=4.65
+pyperclip>=1.8
+mutagen>=1.46
+soundfile>=0.12
+pyyaml>=6.0
+py-cpuinfo>=9.0
+psutil>=5.9
+noisereduce>=3.0        # audio_denoise: true
+librosa>=0.10           # resampling, file streaming
+scipy>=1.10             # audio_highpass: true
+
+# ── Server (optional — `pip install .[server]`) ──────────────────────────────
+fastapi>=0.100
+uvicorn[standard]>=0.23
+sse-starlette>=1.6
+python-multipart>=0.0.6
