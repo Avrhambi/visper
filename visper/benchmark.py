@@ -52,7 +52,30 @@ from typing import Optional
 import numpy as np
 
 ROOT = Path(__file__).parent.parent
-RESULTS_PATH = ROOT / "benchmark_results.json"
+
+
+def _results_path() -> Path:
+    """benchmark_results.json location.
+
+    Prefer the repo root (editable install — keeps the file with the project).
+    Fall back to ~/.visper/ when that directory isn't writable, e.g. a
+    non-editable 'pip install' into a read-only site-packages.
+    """
+    repo = ROOT / "benchmark_results.json"
+    if repo.exists():
+        return repo
+    try:
+        probe = ROOT / ".visper-write-test"
+        probe.touch()
+        probe.unlink()
+        return repo
+    except OSError:
+        home = Path.home() / ".visper"
+        home.mkdir(parents=True, exist_ok=True)
+        return home / "benchmark_results.json"
+
+
+RESULTS_PATH = _results_path()
 RECORDS_DIR  = ROOT / "records"
 MODEL_ID     = "ivrit-ai/whisper-large-v3-turbo-ct2"
 MLX_MODEL_ID = "mlx-community/whisper-large-v3-turbo"  # benchmark uses Hebrew base turbo
@@ -1303,10 +1326,11 @@ def format_report_table() -> str:
 
 
 def _load_igpu_margin() -> float:
+    # Fallback matches the shipped config.yaml value.
     try:
-        return float(_load_config_yaml().get("igpu_preference_margin", 0.0))
+        return float(_load_config_yaml().get("igpu_preference_margin", 0.05))
     except Exception:
-        return 0.0
+        return 0.05
 
 
 def force_rebenchmark() -> None:

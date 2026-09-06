@@ -63,22 +63,24 @@ class Transcriber:
         # Load per-session config flags (read once at construction time)
         self._language = "he"
         self._vad_filter = True
-        self._vad_min_silence_ms = 300
+        self._vad_min_silence_ms = 500
         self._vad_speech_pad_ms = 200
-        self._denoise = False
-        self._normalize_volume = False
-        self._highpass = False
+        self._denoise = True
+        self._normalize_volume = True
+        self._highpass = True
         self._hotwords: str = ""
         try:
             from visper._config import load_config
             _ucfg = load_config()
             self._language = _ucfg.get("language", "he")
             self._vad_filter = _ucfg.get("vad_filter", True)
-            self._vad_min_silence_ms = _ucfg.get("vad_min_silence_ms", 300)
+            # Fallbacks match the shipped config.yaml so a config-load failure
+            # degrades to the same behaviour, not a silently different one.
+            self._vad_min_silence_ms = _ucfg.get("vad_min_silence_ms", 500)
             self._vad_speech_pad_ms = _ucfg.get("vad_speech_pad_ms", 200)
-            self._denoise = _ucfg.get("audio_denoise", False)
-            self._normalize_volume = _ucfg.get("audio_normalize", False)
-            self._highpass = _ucfg.get("audio_highpass", False)
+            self._denoise = _ucfg.get("audio_denoise", True)
+            self._normalize_volume = _ucfg.get("audio_normalize", True)
+            self._highpass = _ucfg.get("audio_highpass", True)
             self._hotwords = _ucfg.get("hotwords", "") or ""
         except Exception:
             pass
