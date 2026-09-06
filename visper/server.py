@@ -1,18 +1,23 @@
 """
-FastAPI server for Hebrew STT.
+FastAPI server for Visper.
 
 Install:  pip install -e ".[server]"
-Run:      visper-server   (or: python server.py)
+Run:      visper-server            (binds 127.0.0.1:8000, serves the web UI at /)
+          visper-server --host 0.0.0.0    (expose on the LAN — opt-in)
 
 Endpoints
 ---------
-  GET  /health              → {status, device, compute_type}
-  POST /transcribe          → {text, segments, rtf}   (multipart file upload)
-  POST /transcribe/stream   → SSE stream of {text, is_final} events
+  GET  /                     → the web UI (web/index.html)
+  GET  /health               → {status, device, compute_type}  (503 on error)
+  POST /transcribe           → {text, segments, rtf}   (multipart file upload)
+  POST /transcribe/stream    → SSE stream of {text, is_final} events
+  WS   /ws/live              → live streaming transcription
 """
 from __future__ import annotations
 
+import argparse
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -28,7 +33,11 @@ import numpy as np
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+
+_WEB_DIR = pathlib.Path(__file__).parent.parent / "web"
+# Upload ceiling — refuse a file larger than this before writing it all to disk.
+_MAX_UPLOAD_BYTES = int(os.environ.get("VISPER_MAX_UPLOAD_MB", "200")) * 1024 * 1024
 
 def _register_cuda_dlls() -> None:
     """Add nvidia package DLL folders to PATH so cublas/cudnn are found at runtime."""
@@ -46,35 +55,82 @@ _register_cuda_dlls()
 
 from visper import __version__ as _visper_version
 
-app = FastAPI(title="Visper", version=_visper_version)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-async def _save_upload(file: UploadFile) -> pathlib.Path:
-    suffix = pathlib.Path(file.filename or "audio.wav").suffix or ".wav"
-    tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
-    try:
-        while chunk := await file.read(1 << 20):  # 1 MB chunks
-            tmp.write(chunk)
-    finally:
-        tmp.close()
-    return pathlib.Path(tmp.name)
-
-
-@app.on_event("startup")
-async def warmup():
+@contextlib.asynccontextmanager
+async def _lifespan(app: FastAPI):
+    # Startup: warm the model in a background thread so the first request is fast.
     async def _load():
         try:
-            from visper.api import _get_config, _get_router
+            from visper.api import _get_router
+            from visper.benchmark import get_best_config
 
             def _blocking_warmup():
-                # _get_config may trigger a first-run benchmark — keep it off the loop.
-                cfg = _get_config("medium")
+                # Never run the (multi-minute) benchmark as a side effect of
+                # starting the server — use the heuristic config. If the user
+                # has already run `visper-benchmark`, its result is used instead.
+                cfg = get_best_config("medium", auto_benchmark=False)
                 _get_router(cfg).get("he")
 
             await asyncio.to_thread(_blocking_warmup)
         except Exception as e:
             log.warning("Warmup failed: %s", e)
-    asyncio.create_task(_load())
+
+    warmup_task = asyncio.create_task(_load())
+    try:
+        yield
+    finally:
+        warmup_task.cancel()
+        with contextlib.suppress(BaseException):
+            await warmup_task
+        with contextlib.suppress(Exception):
+            from visper.api import _router
+            if _router is not None:
+                _router.unload()
+
+
+app = FastAPI(title="Visper", version=_visper_version, lifespan=_lifespan)
+
+# The UI is served from this same origin, so no cross-origin access is needed by
+# default. Allow only explicit localhost dev origins (a separate Vite/live-server).
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[o for o in os.environ.get(
+        "VISPER_CORS_ORIGINS",
+        "http://localhost:8000,http://127.0.0.1:8000,http://localhost:5173",
+    ).split(",") if o],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/", include_in_schema=False)
+def index():
+    page = _WEB_DIR / "index.html"
+    if not page.exists():
+        raise HTTPException(status_code=404, detail="web/index.html not found")
+    return FileResponse(page)
+
+
+async def _save_upload(file: UploadFile) -> pathlib.Path:
+    suffix = pathlib.Path(file.filename or "audio.wav").suffix or ".wav"
+    tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    total = 0
+    try:
+        while chunk := await file.read(1 << 20):  # 1 MB chunks
+            total += len(chunk)
+            if total > _MAX_UPLOAD_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Upload exceeds {_MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit",
+                )
+            tmp.write(chunk)
+    except BaseException:
+        tmp.close()
+        pathlib.Path(tmp.name).unlink(missing_ok=True)
+        raise
+    finally:
+        tmp.close()
+    return pathlib.Path(tmp.name)
 
 
 @app.get("/health")
@@ -96,7 +152,8 @@ def health():
             "no_translate": no_translate,
         }
     except Exception as e:
-        return {"status": "error", "error": str(e)}
+        log.exception("Health check failed")
+        return JSONResponse(status_code=503, content={"status": "error", "error": str(e)})
 
 
 @app.post("/transcribe")
@@ -234,7 +291,7 @@ async def live_ws(websocket: WebSocket):
     silence_count     = 0
     audio_offset      = 0  # cumulative samples emitted so far
 
-    def _transcribe(chunk: np.ndarray, prompt: str = None) -> tuple:
+    def _transcribe(chunk: np.ndarray, prompt: "str | None" = None) -> tuple:
         result = engine.transcribe(chunk, bucket="streaming", language=language, initial_prompt=prompt, task=ws_task)
         return result.text.strip(), result.segments or []
 
@@ -304,13 +361,23 @@ async def live_ws(websocket: WebSocket):
 def main() -> None:
     import uvicorn
 
+    parser = argparse.ArgumentParser(description="Visper web UI + transcription API")
+    parser.add_argument("--host", default=os.environ.get("VISPER_HOST", "127.0.0.1"),
+                        help="Bind address. Default 127.0.0.1 (local only). "
+                             "Pass 0.0.0.0 to expose on the LAN.")
+    parser.add_argument("--port", type=int, default=int(os.environ.get("VISPER_PORT", "8000")))
+    args = parser.parse_args()
+
     class _NoHealthLog(logging.Filter):
         def filter(self, record: logging.LogRecord) -> bool:
             return "GET /health" not in record.getMessage()
 
     logging.getLogger("uvicorn.access").addFilter(_NoHealthLog())
 
-    uvicorn.run("visper.server:app", host="0.0.0.0", port=8000, reload=False)
+    if args.host == "0.0.0.0":
+        log.warning("Binding 0.0.0.0 — the API and web UI are reachable from the network.")
+
+    uvicorn.run("visper.server:app", host=args.host, port=args.port, reload=False)
 
 
 if __name__ == "__main__":

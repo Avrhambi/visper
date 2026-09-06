@@ -275,8 +275,8 @@ class Transcriber:
         on_segment: Optional[Callable[[dict], None]] = None,
         _tier_override=None,
         is_aborted: Optional[Callable[[], bool]] = None,
-        language: str = None,
-        initial_prompt: str = None,
+        language: Optional[str] = None,
+        initial_prompt: Optional[str] = None,
         task: str = "transcribe",
     ) -> TranscriptResult:
         """
@@ -480,8 +480,8 @@ class Transcriber:
         self, source, bucket: str, params, vad_filter: bool,
         vad_min_silence_ms: int, vad_speech_pad_ms: int,
         is_aborted: Optional[Callable[[], bool]] = None,
-        language: str = None,
-        initial_prompt: str = None,
+        language: Optional[str] = None,
+        initial_prompt: Optional[str] = None,
         task: str = "transcribe",
     ) -> TranscriptResult:
         """Send a transcription request to the venv worker subprocess.
