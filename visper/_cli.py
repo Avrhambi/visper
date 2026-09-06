@@ -16,6 +16,11 @@ def benchmark():
     main()
 
 
+def eval_():
+    from visper.eval import main
+    main()
+
+
 def help():
     print("""
 Local Speech-to-Text — command reference

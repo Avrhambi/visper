@@ -43,6 +43,7 @@ dev = [
 visper-file      = "visper._cli:file"
 visper-live      = "visper._cli:live"
 visper-benchmark = "visper._cli:benchmark"
+visper-eval      = "visper._cli:eval_"
 visper-server    = "visper.server:main"
 visper-help      = "visper._cli:help"
 

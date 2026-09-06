@@ -1258,6 +1258,51 @@ def run_benchmark(force: bool = False, quick: bool = False, full: bool = False) 
     print(f"\n[Benchmark] Done. Results written to {RESULTS_PATH}")
 
 
+def format_report_table() -> str:
+    """Markdown table of the measured best config per bucket — the source of the
+    RTF numbers in the README. Reads benchmark_results.json; raises if absent."""
+    if not RESULTS_PATH.exists():
+        raise FileNotFoundError(
+            f"{RESULTS_PATH.name} not found — run `visper-benchmark` (or `--fast`) first."
+        )
+    data = json.loads(RESULTS_PATH.read_text())
+    hw = data.get("hardware", {})
+    best = data.get("best", {})
+    mode = data.get("mode", "?")
+
+    cpu = hw.get("cpu", "?")
+    gpu = hw.get("gpu_name")
+    ram = hw.get("ram_mb")
+    hw_line = f"{cpu}" + (f" / {gpu}" if gpu else "") + (f" / {ram // 1024} GB RAM" if ram else "")
+
+    lines = [
+        f"**Measured on:** {hw_line}  ",
+        f"**Benchmark mode:** {mode}  ·  **Model:** `{data.get('model_id', MODEL_ID)}`",
+        "",
+        "| Bucket | Device | Compute | Threads | RTF | Auto tier |",
+        "|---|---|---|--:|--:|---|",
+    ]
+    for bucket in BUCKET_ORDER + ["streaming"]:
+        cfg = best.get(bucket)
+        if not cfg:
+            lines.append(f"| {bucket} | — | — | — | — | — |")
+            continue
+        rtf = cfg.get("rtf")
+        rtf_s = f"{rtf:.3f}" if isinstance(rtf, (int, float)) else "—"
+        dev = cfg.get("device", "?")
+        if dev == "openvino":
+            dev = f"openvino/{cfg.get('openvino_device', '?')}"
+            compute = "—"
+        else:
+            compute = cfg.get("compute_type", "?")
+        threads = cfg.get("cpu_threads", "—")
+        tier = cfg.get("auto_accuracy_tier", "?")
+        lines.append(f"| {bucket} | {dev} | {compute} | {threads} | {rtf_s} | {tier} |")
+
+    lines += ["", "_RTF = wall-clock / audio duration; lower is faster, 1.0 = real time._"]
+    return "\n".join(lines)
+
+
 def _load_igpu_margin() -> float:
     try:
         return float(_load_config_yaml().get("igpu_preference_margin", 0.0))
