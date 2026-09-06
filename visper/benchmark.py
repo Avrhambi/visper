@@ -498,8 +498,8 @@ def run_fast_benchmark(force: bool = False) -> None:
 
     # Stamp venv path so Transcriber can use the same venv
     from visper import venv_manager
-    vp = venv_manager.venv_path(working_primary["device"])
-    if vp.exists():
+    if venv_manager.venv_exists(working_primary["device"]):
+        vp = venv_manager.venv_path(working_primary["device"])
         for cfg in best.values():
             if cfg:
                 cfg["venv_path"] = str(vp)
@@ -1242,9 +1242,8 @@ def run_benchmark(force: bool = False, quick: bool = False, full: bool = False) 
     for cfg in best.values():
         if cfg is None:
             continue
-        vp = venv_manager.venv_path(cfg["device"])
-        if vp.exists():
-            cfg["venv_path"] = str(vp)
+        if venv_manager.venv_exists(cfg["device"]):
+            cfg["venv_path"] = str(venv_manager.venv_path(cfg["device"]))
 
     output = {
         "timestamp": datetime.now().isoformat(timespec="seconds"),

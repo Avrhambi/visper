@@ -27,6 +27,11 @@ from pathlib import Path
 ROOT = Path(__file__).parent.parent
 VENVS_DIR = ROOT / ".venvs"
 
+# Written only after every package install succeeds. venv_exists() checks for it
+# so a venv left half-built by a failed install is treated as absent (and rebuilt)
+# rather than "reused" and then failing to import faster_whisper at runtime.
+_READY_MARKER = ".visper-ready"
+
 _BASE = ["numpy", "soundfile"]
 
 DEVICE_PACKAGES: dict[str, list[str]] = {
@@ -50,10 +55,28 @@ DEVICE_PACKAGES: dict[str, list[str]] = {
     ],
 }
 
-# OpenVINO requires Python 3.12 for package compatibility
+# The native-wheel stack (ctranslate2, onnxruntime, openvino) lags the newest
+# CPython by a release or two, so a device venv built with e.g. 3.14 can fail
+# `pip install faster-whisper`. Prefer 3.12 when the host has it; fall back to
+# whatever is running this process. OpenVINO *requires* 3.12.
+def _preferred_python(min_ok: tuple = (3, 10), max_ok: tuple = (3, 12)) -> list[str]:
+    running = sys.version_info[:2]
+    if min_ok <= running <= max_ok:
+        return [sys.executable]
+    for ver in ("3.12", "3.11", "3.10"):
+        if shutil.which("py"):
+            try:
+                subprocess.check_output(["py", f"-{ver}", "-c", "import sys"],
+                                        stderr=subprocess.DEVNULL)
+                return ["py", f"-{ver}"]
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                continue
+    return [sys.executable]
+
+
 _DEVICE_PYTHON_CMD: dict[str, list[str]] = {
-    "cpu":      [sys.executable],
-    "cuda":     [sys.executable],
+    "cpu":      _preferred_python(),
+    "cuda":     _preferred_python(),
     "openvino": ["py", "-3.12"],
 }
 
@@ -69,11 +92,16 @@ def python_exe(device: str) -> Path:
 
 
 def venv_exists(device: str) -> bool:
-    return python_exe(device).exists()
+    return python_exe(device).exists() and (venv_path(device) / _READY_MARKER).exists()
 
 
 def create_venv(device: str) -> None:
-    """(Re)create a device venv and install its packages."""
+    """(Re)create a device venv and install its packages.
+
+    All pip commands run as ``<venv python> -m pip`` — invoking the venv's
+    ``pip.exe`` directly to upgrade pip fails on Windows ("To modify pip, please
+    run ... -m pip ..."), which used to abort the whole benchmark.
+    """
     if device not in DEVICE_PACKAGES:
         raise ValueError(f"Unknown device {device!r}. Valid: {list(DEVICE_PACKAGES)}")
 
@@ -82,20 +110,30 @@ def create_venv(device: str) -> None:
         shutil.rmtree(dest, ignore_errors=True)
     dest.mkdir(parents=True, exist_ok=True)
 
-    py_cmd = _DEVICE_PYTHON_CMD[device]
-    print(f"[VenvManager] Creating .venvs/{device}/...")
-    subprocess.check_call([*py_cmd, "-m", "venv", str(dest)])
+    try:
+        py_cmd = _DEVICE_PYTHON_CMD[device]
+        print(f"[VenvManager] Creating .venvs/{device}/...")
+        subprocess.check_call([*py_cmd, "-m", "venv", str(dest)])
 
-    pip = dest / "Scripts" / "pip.exe"
-    if not pip.exists():
-        pip = dest / "bin" / "pip"
+        vpy = str(python_exe(device))
 
-    subprocess.check_call([str(pip), "install", "-q", "--upgrade",
-                           "pip", "setuptools", "wheel"])
+        # Non-fatal: a fresh 'python -m venv' already ships a usable pip; the
+        # upgrade is only to avoid resolver warnings.
+        try:
+            subprocess.check_call([vpy, "-m", "pip", "install", "-q", "--upgrade",
+                                   "pip", "setuptools", "wheel"])
+        except subprocess.CalledProcessError as e:
+            print(f"[VenvManager] pip self-upgrade skipped ({e}); continuing.")
 
-    packages = DEVICE_PACKAGES[device]
-    print(f"[VenvManager] Installing {device} packages: {', '.join(packages)}")
-    subprocess.check_call([str(pip), "install", "-q", *packages])
+        packages = DEVICE_PACKAGES[device]
+        print(f"[VenvManager] Installing {device} packages: {', '.join(packages)}")
+        subprocess.check_call([vpy, "-m", "pip", "install", "-q", *packages])
+    except BaseException:
+        # Never leave a half-built venv that venv_exists() would accept.
+        shutil.rmtree(dest, ignore_errors=True)
+        raise
+
+    (dest / _READY_MARKER).write_text("")
     print(f"[VenvManager] .venvs/{device}/ ready.")
 
 
