@@ -76,6 +76,8 @@ tests/speed_test_short.ipynb
 # ── Results / plans (local work, not for repo) ────────────────────────────────
 results/
 plan/
+eval_results.md
+*.md.json
 
 # ── Local work / personal config ──────────────────────────────────────────────
 .gitmessage
