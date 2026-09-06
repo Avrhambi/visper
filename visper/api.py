@@ -136,7 +136,11 @@ def transcribe(
     config = _get_config(resolved_bucket)
     language = "he"  # transcribe() is Hebrew-only; use transcribe_chunked() for other languages
     engine = _get_router(config).get(language)
-    result = engine.transcribe(source, bucket=resolved_bucket, is_aborted=is_aborted)
+    # Pass language through so the decode token matches the routed model — else
+    # engine.transcribe falls back to self._language (config.yaml) and a
+    # `language: en` there would feed the Hebrew CT2 model an <|en|> token.
+    result = engine.transcribe(source, bucket=resolved_bucket, is_aborted=is_aborted,
+                               language=language)
     return result.text
 
 
