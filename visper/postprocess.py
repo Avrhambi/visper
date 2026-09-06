@@ -27,8 +27,11 @@ _LATIN_THEN_HE = re.compile(r'([A-Za-z])([֐-׿])')
 # Trailing comma or semicolon at end of a segment (Whisper hallucination)
 _TRAILING_COMMA = re.compile(r'[,;]\s*$')
 
-# Three or more consecutive identical characters (hallucination collapse, e.g. "אאאאא" → "א")
-_REPEAT_CHAR = re.compile(r'(.)\1{2,}')
+# Four or more consecutive identical *letters* (hallucination collapse, e.g. "אאאאא" → "א").
+# Restricted to letters and requires 4+ so it never touches real data:
+#   - digit runs ("20000", "1000000") must survive — excluded via [^\W\d_]
+#   - real Hebrew/Latin words never repeat one letter 4× in a row
+_REPEAT_CHAR = re.compile(r'([^\W\d_])\1{3,}', re.UNICODE)
 
 # Three or more consecutive identical words (hallucination collapse)
 _REPEAT_WORD = re.compile(r'\b(\S+)(?:\s+\1){2,}\b')
@@ -62,7 +65,8 @@ def normalize_hebrew(text: str) -> str:
         '  →  ׳  (Geresh,    U+05F3)  — used for units, proper names
     - Insert a space at Hebrew/Latin script boundaries (Whisper drops spaces at code-switch)
     - Strip trailing comma or semicolon (Whisper often ends segments with ,)
-    - Collapse 3+ consecutive identical characters to 1 (hallucination pattern, e.g. "אאאאא" → "א")
+    - Collapse 4+ consecutive identical letters to 1 (hallucination pattern, e.g. "אאאאא" → "א";
+      digit runs like "20000" are left intact)
     - Collapse 3+ consecutive identical words to 1
     - Strip known Whisper YouTube hallucination phrases
     """
