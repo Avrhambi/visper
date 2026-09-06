@@ -13,6 +13,10 @@ GEMINI.md
 # ── Auto-generated benchmark output ───────────────────────────────────────────
 benchmark_results.json
 
+# ── Local exploratory work (not part of the repo) ─────────────────────────────
+/speed_test*.ipynb          # raw Colab accuracy sweeps — cleaned version in notebooks/
+/datasets - Shortcut.lnk    # machine-specific dataset shortcut
+
 # ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
