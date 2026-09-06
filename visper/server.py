@@ -34,6 +34,7 @@ import numpy as np
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 _WEB_DIR = pathlib.Path(__file__).parent.parent / "web"
 # Upload ceiling — refuse a file larger than this before writing it all to disk.
@@ -109,6 +110,10 @@ def index():
     if not page.exists():
         raise HTTPException(status_code=404, detail="web/index.html not found")
     return FileResponse(page)
+
+
+if (_WEB_DIR / "vendor").is_dir():
+    app.mount("/vendor", StaticFiles(directory=_WEB_DIR / "vendor"), name="vendor")
 
 
 async def _save_upload(file: UploadFile) -> pathlib.Path:

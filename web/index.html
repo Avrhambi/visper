@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-  <!-- Lucide Icons -->
-  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Lucide Icons — vendored (offline tool; no unpinned CDN dependency) -->
+  <script src="vendor/lucide-1.41.0.min.js"></script>
   <style>
     *, *::before, *::after {
       box-sizing: border-box;
@@ -1068,8 +1068,18 @@
 </div>
 
 <script>
-  const API    = "http://localhost:8000";
-  const WS_URL = "ws://localhost:8000/ws/live";
+  // Same-origin by default (the server serves this page). Override for a
+  // separately-hosted UI with ?api=http://host:port in the URL.
+  const _apiOverride = new URLSearchParams(location.search).get('api');
+  const API = _apiOverride
+    ? _apiOverride.replace(/\/$/, '')
+    : (location.origin.startsWith('http') ? location.origin : 'http://localhost:8000');
+  const WS_URL = API.replace(/^http/, 'ws') + '/ws/live';
+
+  // Escape a string for safe interpolation into innerHTML.
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
 
   const LANG_LABELS = {
     he: 'עברית', en: 'אנגלית', ar: 'ערבית', ru: 'רוסית',
@@ -1345,7 +1355,7 @@
         <div class="file-preview-icon">
           <i data-lucide="file-audio" size="24"></i>
         </div>
-        <div class="file-preview-name" title="${file.name}">${file.name}</div>
+        <div class="file-preview-name" title="${esc(file.name)}">${esc(file.name)}</div>
         <div class="file-preview-status queued" id="file-status-${i}">הועלה</div>
         <div class="file-progress-container" id="file-progress-container-${i}">
           <div class="file-progress-bar" id="file-progress-bar-${i}"></div>
@@ -1615,8 +1625,14 @@
     if (translateToEn) _wsParams.set('translate', '1');
     if (initialPrompt) _wsParams.set('initial_prompt', initialPrompt);
     liveWs = new WebSocket(`${WS_URL}?${_wsParams}`);
+    liveWs.onerror = () => {
+      document.getElementById('wsStatusText').textContent = "שגיאת חיבור לשרת";
+      try { liveWs.close(); } catch {}
+      onSessionEnd();
+    };
     liveWs.onmessage = ({ data }) => {
-      const d = JSON.parse(data);
+      let d;
+      try { d = JSON.parse(data); } catch { return; }
       if (d.status === "ready") {
         isRecording = true;
         // Calibration done — now transition to workspace
@@ -1782,10 +1798,10 @@
           <i data-lucide="${item.type === 'live' ? 'mic' : 'file-audio'}" class="lib-icon" stroke-width="1.5"></i>
           <div>
             <div class="lib-title">
-              ${item.title}
-              <span class="lang-tag">${item.translated ? (LANG_LABELS[item.language] || item.language) + ' → EN' : (LANG_LABELS[item.language] || item.language)}</span>
+              ${esc(item.title)}
+              <span class="lang-tag">${esc(item.translated ? (LANG_LABELS[item.language] || item.language) + ' → EN' : (LANG_LABELS[item.language] || item.language))}</span>
             </div>
-            <div class="lib-meta">${item.date}</div>
+            <div class="lib-meta">${esc(item.date)}</div>
           </div>
         </div>
         <i data-lucide="chevron-down" class="lib-chevron" stroke-width="1.5"></i>
