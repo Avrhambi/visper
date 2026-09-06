@@ -19,21 +19,23 @@ visper/model_router.py ◄── config.yaml (models, force_model)
         │
         ▼
 visper/transcriber.py  ◄── visper/params.py ◄── config.yaml (accuracy_mode)
-(faster-whisper / openvino_genai; normalize → highpass → denoise pre-processing chain)
+(faster-whisper / openvino_genai, or venv-worker subprocess;
+ normalize → highpass → denoise pre-processing chain)
         │
+        ├── task=translate & language=he ──► visper/translate.py
+        │   (Hebrew transcript ──► opus-mt-he-en / CTranslate2 ──► English)
         ▼
 visper/postprocess.py
 (text normalization)
         │
         ▼
-TranscriptResult {text, segments, rtf, tier_used, ...}
+TranscriptResult {text, segments, rtf, tier_used, backend, he_text, ...}
         │
         ▼
 visper/api.py: transcribe() / stream_transcribe() / transcribe_chunked()
         │
-        ├── transcribe_file.py  (CLI: visper-file)
-        ├── transcribe_live.py  (CLI: visper-live)
-        └── server.py           (FastAPI: visper-server)
+        ├── visper/_cli.py      (visper-file / visper-live / visper-benchmark / visper-eval)
+        └── visper/server.py    (FastAPI: visper-server)
 ```
 
 ---
@@ -48,7 +50,11 @@ visper/api.py: transcribe() / stream_transcribe() / transcribe_chunked()
 
 **`visper/model_router.py`** — Holds at most one `Transcriber` in memory at a time. Resolves the correct model ID from the `models` map in `config.yaml` based on the requested language, then loads or swaps the `Transcriber` as needed. Thread-safe — concurrent requests for different languages serialize on the swap lock. `force_model` in `config.yaml` bypasses routing entirely.
 
-**`visper/transcriber.py`** — The only file that imports `faster_whisper` or `openvino_genai`. Accepts a hardware config dict (including `model_id`), loads the model, and exposes `transcribe(source, bucket)`. Walks the fallback chain on load failure or OOM. Runs an optional audio pre-processing chain before inference — volume normalization, 80 Hz high-pass filter, and noise reduction — in that order, skipped for streaming. Resolves Whisper params per-call via `params.get_params()`.
+**`visper/transcriber.py`** — The only file that imports `faster_whisper` or `openvino_genai`. Accepts a hardware config dict (including `model_id`), loads the model, and exposes `transcribe(source, bucket)`. When the pinned config carries a `venv_path` (the default after a benchmark), the decode runs in `worker.py` instead of in-process. Walks the fallback chain on load failure or OOM. Runs an optional audio pre-processing chain before inference — volume normalization, 80 Hz high-pass filter, and noise reduction — in that order, skipped for streaming. Resolves Whisper params per-call via `params.get_params()`. For a Hebrew `task=translate` request it runs the two-stage path: a Hebrew decode, then `translate.py` for he→en MT (never re-entrant — the nested call is always `task=transcribe`).
+
+**`visper/translate.py`** — Stage 2 of Hebrew→English. Loads `Helsinki-NLP/opus-mt-tc-big-he-en` converted to CTranslate2 int8 (fetched from a GitHub release asset to `~/.visper/models/` on first use, verified against a pinned SHA-256, then fully offline). `get_hebrew_english_translator()` returns `None` on any failure — missing/corrupt model, un-importable `ctranslate2`/`sentencepiece`, load error — and the caller degrades to Whisper's own translate task. Translation never hard-fails a transcription.
+
+**`visper/eval.py`** — `visper-eval`: local WER/CER over reference corpora with `jiwer`. Scores both reference and hypothesis through the shipped normalizer plus a symmetric punctuation/case strip (reference corpora carry no punctuation). Writes a JSON sidecar of every ref/hyp pair so `--rescore` recomputes the table without re-transcribing.
 
 **`visper/api.py`** — Thin, stable public interface: `transcribe()`, `stream_transcribe()`, `transcribe_chunked()`. Handles duration detection and bucket resolution. Routes to the correct `Transcriber` via `ModelRouter`. These signatures are frozen — external callers depend on them.
 
@@ -56,7 +62,7 @@ visper/api.py: transcribe() / stream_transcribe() / transcribe_chunked()
 
 **`visper/postprocess.py`** — Hebrew-specific text normalization applied after Whisper output: diacritics removal, typographic quote substitution, script boundary spacing, trailing punctuation cleanup, duplicate word collapse.
 
-**`visper/worker.py`** — Optional subprocess worker. Spawned by `Transcriber` when a device-specific venv is needed. Communicates over stdin/stdout with a JSON line protocol. Lets the engine run OpenVINO or CUDA in a venv with a different Python/package set than the caller.
+**`visper/worker.py`** — Subprocess worker, and the **default runtime** once a benchmark has stamped a `venv_path` into `benchmark_results.json` (the host Python is 3.14; `faster-whisper` wheels need 3.12). Spawned once by `Transcriber` and kept warm. Communicates over stdin/stdout with a JSON-line protocol. Also lets the engine run OpenVINO or CUDA in a venv with a different Python/package set than the caller.
 
 ---
 
