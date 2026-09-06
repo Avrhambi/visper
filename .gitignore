@@ -34,7 +34,8 @@ build/
 .venv/
 venv/
 env/
-.venvs/          # device-specific venvs managed by venv_manager.py
+# device-specific venvs managed by venv_manager.py
+.venvs/
 tests/.venv_ov_conv/
 
 # ── OS ────────────────────────────────────────────────────────────────────────
