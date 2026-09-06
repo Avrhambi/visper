@@ -6,7 +6,6 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 language: "he"
-model_id: "ivrit-ai/whisper-large-v3-turbo-ct2"
 
 # Set to true to run noise reduction on audio before transcription.
 # Improves accuracy on recordings with background noise (fan, AC, crowd).
@@ -42,13 +41,13 @@ accuracy_mode: "auto"
 output_format: "txt"
 
 # ── Per-bucket accuracy overrides (optional) ──────────────────────────────
-bucket_accuracy_overrides:
-  short:     "accurate"
-  medium:    "accurate"
-  long:      "accurate"
-  extended:  "accurate"
-# CUDA int8_float32 RTF: short=0.58, medium=0.20, long=0.18, extended=0.15
-# All well under 0.85 budget even at accurate tier (4.5x multiplier).
+# Pin a specific tier for one duration bucket, e.g. force "accurate" only for
+# short clips. Leave empty to let accuracy_mode: auto pick per bucket from the
+# measured RTF headroom (recommended — a blanket "accurate" here disables both
+# the auto tier ladder and the RTF>0.85 safety demotion).
+bucket_accuracy_overrides: {}
+#  short:    "accurate"
+#  extended: "fast"
 
 # ══ STREAMING ════════════════════════════════════════════════════════════════
 # Settings for live microphone and file-streaming mode.
@@ -70,7 +69,6 @@ noise_calibration_seconds: 1.5  # 0 = disable. Records ambient noise at session 
 
 # ── Output ────────────────────────────────────────────────────────────────────
 write_output_file: true      # write <input_filename>.txt alongside input
-print_to_stdout: true
 
 # ── Confidence retry ──────────────────────────────────────────────────────────
 # Re-run at next accuracy tier if avg log-prob below threshold.

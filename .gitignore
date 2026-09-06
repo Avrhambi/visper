@@ -14,8 +14,10 @@ GEMINI.md
 benchmark_results.json
 
 # ── Local exploratory work (not part of the repo) ─────────────────────────────
-/speed_test*.ipynb          # raw Colab accuracy sweeps — cleaned version in notebooks/
-/datasets - Shortcut.lnk    # machine-specific dataset shortcut
+# raw Colab accuracy sweeps — superseded by visper-eval
+/speed_test*.ipynb
+# machine-specific dataset shortcut
+/datasets - Shortcut.lnk
 
 # ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
