@@ -40,16 +40,32 @@ non-Hebrew-speaking colleague.
 
 Two-stage pipeline. Stage 1 is unchanged ivrit-ai transcription. Stage 2 takes
 the Hebrew **segments** and translates each one's text to English with a
-dedicated he→en model running under CTranslate2 in the worker process.
+dedicated he→en model under CTranslate2.
 
 ```
 audio ──▶ ivrit-ai (Whisper/CT2) ──▶ Hebrew segments ──┬──▶ return {he text, segments}
                                                         │
                               task=translate only ──────▶ he→en MT (OPUS-MT/CT2)
-                                                        │      per-segment
+                                                        │      batch, one segment per entry
                                                         └──▶ return {en text, segments(en, he timestamps),
                                                                      he_text}   (bilingual)
 ```
+
+**Where stage 2 runs — the main process, not the worker.** The venv-worker
+exists to isolate the *faster-whisper* runtime (no 3.13/3.14 wheels). But
+`ctranslate2` is already a declared transitive dependency of `faster-whisper`
+in `pyproject.toml`, and it imports and runs on the host Python (verified:
+`ctranslate2 4.7.1` on 3.14, int8 compute types available). So stage 2 is a
+thin wrapper around `Transcriber.transcribe()`:
+
+- `task == "translate"` and Hebrew and MT model present → recurse into
+  `transcribe(..., task="transcribe", language="he")` (same `bucket` and
+  `_tier_override`, so the pinned tier is preserved), then translate the
+  Hebrew segments and return an English `TranscriptResult` with `he_text` set.
+- This covers the in-process **and** venv-worker runtimes with one code path —
+  no new worker action, no protocol change, no double implementation.
+- If the MT model is absent / fails to import: fall through to the existing
+  behaviour (Whisper's own `task=translate`). Never hard-fail.
 
 ### Model  *(finalised + verified)*
 
@@ -63,9 +79,15 @@ directly from the model's `source.spm` / `target.spm` — no `transformers` /
   `target.spm`, `vocab.json` copied in from the HF repo (the converter does not
   copy them). Result: `model.bin` ~241 MB + vocab + spm.
 - Conversion needs `transformers` + `torch`, **build-time only**. The converted
-  dir is published as a GitHub release asset and downloaded on first use
-  (`gh` is authenticated); `~/.visper/models/opus-mt-tc-big-he-en-ct2/`.
-- Runtime dependency added: **`sentencepiece` only**.
+  dir is packed as `opus-mt-tc-big-he-en-ct2.tar.gz` and attached to a GitHub
+  release on the Visper repo (`gh` is authenticated as `Avrhambi`). On first
+  `translate` it is downloaded + extracted to
+  `~/.visper/models/opus-mt-tc-big-he-en-ct2/`, then loaded offline forever
+  after. HF Hub was considered and declined — it would put a low-value format
+  conversion under a personal ML identity; a release asset keeps the artifact
+  with the project.
+- Runtime dependency added: **`sentencepiece` only** (ctranslate2 is already
+  transitive via faster-whisper).
 
 **Verified inference recipe** (quality confirmed on Hebrew test sentences):
 
@@ -77,30 +99,36 @@ english = sp_tgt.decode(out)
 ```
 
 No `>>eng<<` prefix (bilingual model; adding it *degraded* output in testing).
-Translate one Whisper segment per batch entry — segments are already
-sentence-sized, and Marian degrades on multi-sentence input.
+One Whisper segment per batch entry — segments are already sentence-sized, and
+Marian degrades on multi-sentence input. All segments go in a single
+`translate_batch` call so the model load cost (~5 s cold) is paid once.
 
-### Worker protocol
+### `visper/translate.py`
 
-New action in `visper/worker.py`:
-
-```json
-{"action": "translate_text", "segments": [{"start", "end", "text"}], "src": "he", "tgt": "en"}
-→ {"status": "ok", "segments": [{"start", "end", "text"}]}   // text now English
-```
-
-The MT model is lazy-loaded on first `translate_text` and kept resident
-(~small). It never displaces the ASR model — separate slot.
+- `HebrewEnglishTranslator` — loads `ctranslate2.Translator` + two
+  `SentencePieceProcessor`s from `~/.visper/models/opus-mt-tc-big-he-en-ct2/`.
+  `.translate(list[str]) -> list[str]`, batched, `</s>`-terminated.
+- `get_hebrew_english_translator() -> HebrewEnglishTranslator | None` —
+  module-level cached singleton. Returns `None` (and logs once) if the model
+  dir is missing, download fails, or `ctranslate2` / `sentencepiece` won't
+  import. Callers treat `None` as "translation unavailable".
+- `ensure_model() ` — download + extract the release asset if the dir is
+  absent. Skipped entirely when the dir exists (offline).
 
 ### Transcriber / API
 
-- `Transcriber._transcribe_via_worker`: when `task == "translate"`, after the
-  normal round-trip, send a second `translate_text` round-trip with the Hebrew
-  segments, swap the segment texts, rebuild `TranscriptResult.text` from the
-  English segments, and attach `he_text` (the original) for a bilingual view.
-- In-process path (`_transcribe_direct`): same, calling a stage-2 helper that
-  runs the CT2 translator in-process (needs the CT2 model present; degrade to
-  the old behaviour with a warning if missing).
+- `Transcriber.transcribe()` gains a guard at the top: if
+  `task == "translate"` and the effective language is `he` and
+  `get_hebrew_english_translator()` is not `None`, recurse with
+  `task="transcribe", language="he"` (passing `bucket` and `_tier_override`
+  through unchanged), then translate the resulting segments, rebuild `.text`
+  from the English segments, set `.he_text`, and fire `on_segment` **once per
+  English segment** after stage 2. Translate mode is therefore final-result
+  shaped: the segment callbacks carry English, matching `.text`. During the
+  stage-1 Whisper decode no segments stream (documented trade-off — the MT
+  pass is a small fraction of ASR time).
+- `TranscriptResult` gains `he_text: str = ""` (last field; the only legal
+  position — every existing field is non-default).
 - `api.transcribe_chunked(..., task="translate", language="he")` — entry point
   unchanged. `_norm_lang` already switches to `"en"` for the post-normaliser.
 
