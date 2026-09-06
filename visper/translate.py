@@ -79,13 +79,20 @@ def _model_present() -> bool:
 
 
 def _safe_extract(tar: tarfile.TarFile, dest: Path) -> None:
-    """Extract, refusing any member that would escape ``dest`` (path traversal)."""
+    """Extract, refusing anything that could escape ``dest`` — traversal paths,
+    absolute paths, or links. The asset is a checksum-pinned tar of a plain
+    model directory; none of these should ever appear."""
     dest = dest.resolve()
     for member in tar.getmembers():
+        if member.issym() or member.islnk():
+            raise RuntimeError(f"unexpected link in archive: {member.name!r}")
         target = (dest / member.name).resolve()
         if dest != target and dest not in target.parents:
             raise RuntimeError(f"unsafe path in archive: {member.name!r}")
-    tar.extractall(dest)
+    try:
+        tar.extractall(dest, filter="data")   # py>=3.12: also blocks unsafe perms
+    except TypeError:
+        tar.extractall(dest)
 
 
 def ensure_model() -> bool:
