@@ -194,6 +194,24 @@ module bool.
 
 Simplification: `_model_files_ok` consolidation done (`_MODEL_FILES`). The `elif en_full` branch kept as defensive (≈3 lines).
 
+## Security review (inline, pre-merge)
+
+The one security-relevant boundary is `ensure_model()` — it fetches a ~210 MB
+archive over the network and extracts it into `~/.visper/`.
+
+| Aspect | Assessment |
+|---|---|
+| Transport | Hardcoded `https://github.com/...` release URL; `urllib` validates the TLS cert by default. `timeout=30`. |
+| Integrity | SHA-256 of the canonical asset is pinned and **enforced** (`if expected and got != expected: raise`). A mirror URL (`VISPER_MT_HE_EN_URL`) verifies against `VISPER_MT_HE_EN_SHA256` when the user sets it; skipped only for an explicit mirror with no companion hash — the user opted into that. |
+| Archive extraction | `_safe_extract` rejects symlink/hardlink members, resolves every member path against the destination and rejects any that escapes it, and applies tarfile's `filter="data"` on 3.12+. Post-extract it checks the exact file set (`_MODEL_FILES`). |
+| Install | `os.replace` onto `_MODEL_DIR` from a same-filesystem tempdir, guarded by `if not _MODEL_DIR.exists()`. A concurrent-download TOCTOU window exists; worst case is one process raises and degrades, then picks up the other's model on restart. Acceptable for a single-user local tool. |
+| Model deserialization | `ctranslate2.Translator` reads `model.bin` and SentencePiece reads the `.spm` protobufs — both covered by the pinned checksum, i.e. the same trust root as the rest of the release. |
+| Secrets / auth / PII | none in this module. stderr logging prints only the public URL. |
+| Inference input | Whisper segment text (the user's own audio) → SentencePiece → CT2 → decode. No injection surface. |
+
+**Findings: none.** The download/extract boundary is guarded with HTTPS + a
+pinned SHA-256 + link rejection + a path-traversal guard + the tar data filter.
+
 ## Unresolved / could not verify
 
 - **`sentencepiece` wheel availability on Python 3.13/3.14.** *Resolved:* PyPI ships
