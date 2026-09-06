@@ -46,8 +46,10 @@ plain `pip install`.
 5. Mechanical dedup — shared SRT/VTT/JSON formatter, duration + bucket helpers.
 6. Web UI + server hardening — serve UI at `/`; localhost bind + CORS by default;
    fix XSS; upload cap; lifespan handler; vendor `lucide`.
-7. Eval + benchmark harnesses — `visper/eval.py` + `visper-eval`; one consolidated
-   shortened Colab `notebooks/accuracy_sweep.ipynb`; `visper-benchmark --report`.
+7. Eval + benchmark harnesses — `visper/eval.py` + `visper-eval` (local WER/CER over
+   `datasets/`, single config, imports the shipped normalizer, dataset-labelled
+   markdown table); `visper-benchmark --report` for the RTF table. No Colab notebook —
+   the 18-way sweep is dropped; the raw `speed_test*.ipynb` stay gitignored as history.
 8. Docs rewrite (LAST) — README as engineering blueprint with real numbers only;
    ARCHITECTURE.md corrected.
 
