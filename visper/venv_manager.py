@@ -22,6 +22,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
@@ -95,6 +96,45 @@ def venv_exists(device: str) -> bool:
     return python_exe(device).exists() and (venv_path(device) / _READY_MARKER).exists()
 
 
+def _rmtree_confirmed(path: Path, tries: int = 12) -> bool:
+    """rmtree, then wait until the directory is really gone.
+
+    ``shutil.rmtree(ignore_errors=True)`` returns happily while a briefly
+    AV-locked ``python.exe`` is still on disk; the next ``python -m venv`` then
+    hits PermissionError on that exact file. Poll so a retry starts clean.
+    """
+    for _ in range(tries):
+        if not path.exists():
+            return True
+        shutil.rmtree(path, ignore_errors=True)
+        if not path.exists():
+            return True
+        time.sleep(0.5)
+    return not path.exists()
+
+
+def _create_venv_tree(py_cmd: list[str], dest: Path, attempts: int = 3) -> None:
+    """``python -m venv`` with retry.
+
+    On Windows, real-time AV scanning the freshly-copied ``python.exe`` can make
+    the ensurepip step (run inside venv creation) exit 1, or make the following
+    call fail with PermissionError. The lock clears within a second or two, so
+    wipe and retry rather than aborting the whole benchmark.
+    """
+    for attempt in range(1, attempts + 1):
+        try:
+            subprocess.check_call([*py_cmd, "-m", "venv", str(dest)])
+            return
+        except subprocess.CalledProcessError:
+            if attempt == attempts:
+                raise
+            print(f"[VenvManager] venv creation failed (attempt {attempt}/{attempts}) "
+                  f"— wiping and retrying...")
+            _rmtree_confirmed(dest)
+            time.sleep(2 * attempt)
+            dest.mkdir(parents=True, exist_ok=True)
+
+
 def create_venv(device: str) -> None:
     """(Re)create a device venv and install its packages.
 
@@ -106,14 +146,13 @@ def create_venv(device: str) -> None:
         raise ValueError(f"Unknown device {device!r}. Valid: {list(DEVICE_PACKAGES)}")
 
     dest = venv_path(device)
-    if dest.exists():
-        shutil.rmtree(dest, ignore_errors=True)
+    _rmtree_confirmed(dest)
     dest.mkdir(parents=True, exist_ok=True)
 
     try:
         py_cmd = _DEVICE_PYTHON_CMD[device]
         print(f"[VenvManager] Creating .venvs/{device}/...")
-        subprocess.check_call([*py_cmd, "-m", "venv", str(dest)])
+        _create_venv_tree(py_cmd, dest)
 
         vpy = str(python_exe(device))
 
@@ -130,7 +169,7 @@ def create_venv(device: str) -> None:
         subprocess.check_call([vpy, "-m", "pip", "install", "-q", *packages])
     except BaseException:
         # Never leave a half-built venv that venv_exists() would accept.
-        shutil.rmtree(dest, ignore_errors=True)
+        _rmtree_confirmed(dest)
         raise
 
     (dest / _READY_MARKER).write_text("")
