@@ -65,8 +65,13 @@ async def warmup():
     async def _load():
         try:
             from visper.api import _get_config, _get_router
-            cfg = _get_config("medium")
-            await asyncio.to_thread(lambda: _get_router(cfg).get("he"))
+
+            def _blocking_warmup():
+                # _get_config may trigger a first-run benchmark — keep it off the loop.
+                cfg = _get_config("medium")
+                _get_router(cfg).get("he")
+
+            await asyncio.to_thread(_blocking_warmup)
         except Exception as e:
             log.warning("Warmup failed: %s", e)
     asyncio.create_task(_load())
@@ -77,7 +82,7 @@ def health():
     try:
         from visper.benchmark import get_best_config
         from visper.api import _router
-        cfg = get_best_config("medium")
+        cfg = get_best_config("medium", auto_benchmark=False)
         model = _router._active_model_id if _router else None
         device = cfg.get("device")
         # Hebrew fine-tune (ivrit-ai CT2) is transcription-only — translation output is poor.

@@ -26,6 +26,21 @@ def _get_config(bucket: str) -> dict:
     return _config_cache[bucket]
 
 
+def reset_caches() -> None:
+    """Drop the cached per-bucket configs, the router, and the parsed config.yaml.
+
+    Call after re-running the benchmark or editing config.yaml inside a
+    long-lived process (e.g. the server) so the next transcription picks up
+    the new hardware config without a restart.
+    """
+    global _router
+    from visper._config import reload_config
+    with _router_lock:
+        _config_cache.clear()
+        _router = None
+    reload_config()
+
+
 def _get_router(hw_config: dict):
     global _router
     with _router_lock:
