@@ -29,3 +29,27 @@ self-upgrade non-fatal (a fresh `python -m venv` already ships a working pip).
 - The native-wheel stack (ctranslate2, onnxruntime, openvino) lags the newest
   CPython. A venv built with 3.14 can't `pip install faster-whisper`. Device
   venvs now prefer `py -3.12` when the host has it.
+
+---
+
+## 2026-09-06 — venv creation intermittently fails on Windows (AV lock)
+
+**What broke:** after the pip.exe fix above, `visper-benchmark --fast` still
+failed building `.venvs/cuda`: first run `ensurepip ... returned non-zero exit
+status 1`, second run `[Errno 13] Permission denied: '...\\.venvs\\cuda\\Scripts
+\\python.exe'`. A bare `py -3.12 -m venv .venvs/_probe` succeeded every time.
+
+**Root cause:** Windows Defender real-time protection scans `python.exe` the
+instant `python -m venv` copies it into the new venv, briefly locking the file.
+ensurepip (which runs *inside* venv creation) can't use the locked interpreter →
+exit 1. Worse: `shutil.rmtree(dir, ignore_errors=True)` reports success while
+the locked `python.exe` is still on disk, so the retry starts from a dirty tree
+and hits `PermissionError` on that exact file — reproducing the failure
+deterministically.
+
+**Fix:** `_create_venv_tree()` retries `python -m venv` up to 3× with backoff;
+`_rmtree_confirmed()` polls until the directory is actually gone before any
+recreate. The lock clears within ~1–2 s.
+
+**Gotcha:** `rmtree(ignore_errors=True)` is not "delete the tree" — it's "try,
+shrug on failure". Anywhere a later step assumes the path is gone, poll for it.
