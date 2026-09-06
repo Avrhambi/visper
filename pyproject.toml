@@ -24,6 +24,7 @@ dependencies = [
     "noisereduce>=3.0",
     "librosa>=0.10",
     "scipy>=1.10",
+    "sentencepiece>=0.2",   # he->en translation tokeniser; ctranslate2 comes via faster-whisper
 ]
 
 [project.optional-dependencies]

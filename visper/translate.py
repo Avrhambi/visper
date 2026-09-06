@@ -56,6 +56,22 @@ _load_failed = False
 # Model acquisition
 # ---------------------------------------------------------------------------
 
+def he_en_supported() -> bool:
+    """Whether the he->en path *can* run — deps importable and the model either
+    already on disk or fetchable on first use. Cheap: no download, no model load.
+
+    ``/health`` uses this to decide whether to advertise Hebrew translation.
+    """
+    if _load_failed and not _model_present():
+        return False
+    try:
+        import ctranslate2  # noqa: F401
+        import sentencepiece  # noqa: F401
+    except Exception:
+        return False
+    return True
+
+
 def _model_present() -> bool:
     return (_MODEL_DIR / "model.bin").is_file() and \
            (_MODEL_DIR / "source.spm").is_file() and \

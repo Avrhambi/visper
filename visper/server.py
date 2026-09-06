@@ -146,9 +146,12 @@ def health():
         cfg = get_best_config("medium", auto_benchmark=False)
         model = _router._active_model_id if _router else None
         device = cfg.get("device")
-        # Hebrew fine-tune (ivrit-ai CT2) is transcription-only — translation output is poor.
-        # On MLX (Apple Silicon) the base turbo model is used, which translates fine.
-        no_translate = [] if device == "mlx" else ["he"]
+        # The Hebrew fine-tune (ivrit-ai CT2) is transcription-only. Hebrew
+        # translation is still offered when either a translate-capable base
+        # model is in play (MLX turbo) or the two-stage he->en MT path is
+        # available (visper/translate.py) — else the toggle is hidden.
+        from visper.translate import he_en_supported
+        no_translate = [] if (device == "mlx" or he_en_supported()) else ["he"]
         return {
             "status": "ok",
             "device": device,

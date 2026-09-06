@@ -82,6 +82,17 @@ def test_checksum_mismatch_is_fatal(monkeypatch, tmp_path):
         translate.ensure_model()
 
 
+def test_he_en_supported_true_when_deps_import():
+    # ctranslate2 + sentencepiece are declared deps, so in the test env this is True.
+    assert translate.he_en_supported() is True
+
+
+def test_he_en_supported_false_when_load_failed_and_no_model(monkeypatch):
+    monkeypatch.setattr(translate, "_load_failed", True)
+    monkeypatch.setattr(translate, "_model_present", lambda: False)
+    assert translate.he_en_supported() is False
+
+
 @pytest.mark.skipif(not translate._model_present(),
                     reason="he->en model not installed locally")
 def test_translate_roundtrip_and_blank_passthrough():
