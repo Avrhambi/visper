@@ -49,9 +49,18 @@ def _fake_he_result():
 class TestTranslateHebrew:
     """Stage 2: Hebrew transcript in, English TranscriptResult out."""
 
-    def _run(self, **kw):
+    def _run(self, he_result=None, **kw):
         tr = Transcriber.__new__(Transcriber)
-        tr.transcribe = lambda *a, **k: _fake_he_result()   # type: ignore[method-assign]
+        result = he_result if he_result is not None else _fake_he_result()
+
+        def fake_transcribe(source, *, on_segment=None, **k):  # noqa: ARG001
+            assert k.get("task") == "transcribe"  # guard must not re-enter
+            if on_segment is not None:
+                for s in result.segments:
+                    on_segment(dict(s))
+            return result
+
+        tr.transcribe = fake_transcribe   # type: ignore[method-assign]
         return tr._translate_hebrew("audio.wav", "medium", _FakeMT(), **kw)
 
     def test_segments_become_english_and_text_matches(self):
@@ -73,10 +82,20 @@ class TestTranslateHebrew:
         assert self._run().backend == "venv-worker/cpu+opus-mt-he-en"
 
     def test_empty_transcript_does_not_crash(self):
-        tr = Transcriber.__new__(Transcriber)
         empty = TranscriptResult(text="", segments=[], audio_duration=0.0, elapsed=0.0,
                                  rtf=0.0, config_label="c", backend="b",
                                  tier_used="fast", whisper_params={})
-        tr.transcribe = lambda *a, **k: empty   # type: ignore[method-assign]
-        res = tr._translate_hebrew("a.wav", "short", _FakeMT())
+        res = self._run(he_result=empty)
         assert res.text == "" and res.segments == [] and res.he_text == ""
+
+    def test_mt_failure_returns_the_hebrew_transcript(self):
+        class BoomMT:
+            def translate(self, texts):
+                raise RuntimeError("ct2 exploded")
+
+        tr = Transcriber.__new__(Transcriber)
+        tr.transcribe = lambda *a, **k: _fake_he_result()   # type: ignore[method-assign]
+        res = tr._translate_hebrew("a.wav", "medium", BoomMT())
+        # translation failed -> Hebrew transcript comes back untouched, no raise
+        assert res.text == "שלום עולם מה שלומך"
+        assert res.he_text == ""  # this IS the plain transcript, not a translation

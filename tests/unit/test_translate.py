@@ -39,6 +39,15 @@ def test_safe_extract_allows_normal_members(tmp_path):
     assert (tmp_path / "opus-mt-tc-big-he-en-ct2" / "model.bin").read_bytes() == b"weights"
 
 
+def test_model_present_needs_every_ct2_file(monkeypatch, tmp_path):
+    monkeypatch.setattr(translate, "_MODEL_DIR", tmp_path)
+    for f in translate._MODEL_FILES[:-1]:
+        (tmp_path / f).write_bytes(b"x")
+    assert translate._model_present() is False        # one file short
+    (tmp_path / translate._MODEL_FILES[-1]).write_bytes(b"x")
+    assert translate._model_present() is True
+
+
 def test_ensure_model_noops_when_present(monkeypatch):
     calls = []
     monkeypatch.setattr(translate, "_model_present", lambda: True)
@@ -87,9 +96,9 @@ def test_he_en_supported_true_when_deps_import():
     assert translate.he_en_supported() is True
 
 
-def test_he_en_supported_false_when_load_failed_and_no_model(monkeypatch):
+def test_he_en_supported_false_once_load_has_permanently_failed(monkeypatch):
+    # /health must stop advertising Hebrew translation after the path proved broken.
     monkeypatch.setattr(translate, "_load_failed", True)
-    monkeypatch.setattr(translate, "_model_present", lambda: False)
     assert translate.he_en_supported() is False
 
 

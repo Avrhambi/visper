@@ -298,7 +298,8 @@ class Transcriber:
         # Two-stage Hebrew -> English: the ivrit-ai fine-tune is a transcription
         # specialist and translates poorly, so transcribe in Hebrew and run a
         # dedicated he->en MT pass over the segments. Falls through to Whisper's
-        # own translate task when the MT model isn't available.
+        # own translate task when the MT model isn't available. The nested call
+        # below always uses task="transcribe", so this guard cannot re-enter.
         if task == "translate" and _lang == "he":
             from visper.translate import get_hebrew_english_translator
             _mt = get_hebrew_english_translator()
@@ -501,37 +502,67 @@ class Transcriber:
                           _tier_override=None,
                           is_aborted: Optional[Callable[[], bool]] = None,
                           initial_prompt: Optional[str] = None) -> TranscriptResult:
-        """Stage 2: Hebrew transcription, then a he->en MT pass over the segments.
+        """Stage 2: Hebrew transcription (ivrit-ai, unchanged), then a he->en MT
+        pass over the segments.
 
-        Runs stage 1 with ``on_segment`` withheld — the callbacks fire here,
-        once per *English* segment, so a caller's streamed segments and the
-        final ``text`` are the same language. The stage-1 Whisper decode is
-        therefore silent; the MT pass is a small fraction of ASR time.
+        Streaming callers get a per-segment English *preview* as stage 1
+        decodes; the returned result is rebuilt from the final (post-retry)
+        Hebrew segments, so ``text`` and ``segments`` are always authoritative
+        and one language. If MT fails at any point the Hebrew transcript is
+        returned unchanged — translation never hard-fails a transcription.
         """
+        from visper.postprocess import normalize_text
         t0 = time.time()
+
+        def _one(he_txt: str) -> str:
+            if not he_txt or not he_txt.strip():
+                return ""
+            return normalize_text(mt.translate([he_txt])[0], "en")
+
+        preview_en: list = []
+
+        def _preview_cb(seg: dict) -> None:
+            try:
+                en = _one(seg.get("text", ""))
+            except Exception:
+                en = ""
+            preview_en.append(en)
+            if on_segment is not None:
+                on_segment({**seg, "he_text": seg.get("text", ""), "text": en})
+
+        _cb: Optional[Callable[[dict], None]] = _preview_cb if on_segment is not None else None
         he = self.transcribe(
-            source, bucket=bucket, on_segment=None, _tier_override=_tier_override,
+            source, bucket=bucket, on_segment=_cb, _tier_override=_tier_override,
             is_aborted=is_aborted, language="he", initial_prompt=initial_prompt,
             task="transcribe",
         )
 
-        from visper.postprocess import normalize_text
         segments = he.segments or []
-        en_texts = mt.translate([s.get("text", "") for s in segments]) if segments else []
+        if is_aborted is not None and is_aborted():
+            return he
 
-        new_segments: list = []
-        for s, en in zip(segments, en_texts):
-            seg = dict(s)
-            seg["he_text"] = s.get("text", "")
-            seg["text"] = normalize_text(en, "en")
-            new_segments.append(seg)
-            if on_segment is not None:
-                on_segment(seg)
+        try:
+            if segments and len(preview_en) == len(segments):
+                en_texts = preview_en            # no retry — reuse the preview work
+            elif segments:
+                en_texts = [normalize_text(t, "en") for t in
+                            mt.translate([s.get("text", "") for s in segments])]
+            else:
+                en_texts = []
+            en_full = _one(he.text) if (not segments and he.text) else None
+        except Exception as e:
+            print(f"[translate] he->en failed after transcription, keeping Hebrew: {e}",
+                  file=sys.stderr)
+            return he
 
+        new_segments: list = [
+            {**s, "he_text": s.get("text", ""), "text": en}
+            for s, en in zip(segments, en_texts)
+        ]
         if new_segments:
             text = " ".join(s["text"] for s in new_segments if s["text"]).strip()
-        elif he.text:
-            text = normalize_text(mt.translate([he.text])[0], "en")
+        elif en_full is not None:
+            text = en_full
         else:
             text = ""
 

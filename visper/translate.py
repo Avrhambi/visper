@@ -41,41 +41,55 @@ _ASSET_URL = (
 )
 _ASSET_SHA256 = "fd378bcb2c52c503b4f6816b6a0a382914621612383e141aacbc6916b1337642"
 
-# Override the download URL for testing / air-gapped mirrors.
+# Override the download URL (air-gapped mirror). Set the companion _SHA256 var
+# to keep integrity verification; without it the checksum step is skipped.
 _ASSET_URL_ENV = "VISPER_MT_HE_EN_URL"
+_ASSET_SHA256_ENV = "VISPER_MT_HE_EN_SHA256"
+
+# Every file ``ctranslate2.Translator()`` + SentencePiece need to load — the one
+# definition of "the model is usable", shared by the presence check and the
+# post-download check so they can't drift.
+_MODEL_FILES = ("model.bin", "config.json", "source.spm", "target.spm",
+                "shared_vocabulary.json")
 
 _EOS = "</s>"
-_SPECIALS = frozenset((_EOS, "<pad>", "<unk>"))
+_SPECIALS = frozenset((_EOS, "<pad>"))   # matches the verified recipe
 
 _lock = threading.Lock()
 _singleton: "Optional[HebrewEnglishTranslator]" = None
 _load_failed = False
+_deps_ok: Optional[bool] = None
 
 
 # ---------------------------------------------------------------------------
 # Model acquisition
 # ---------------------------------------------------------------------------
 
+def _deps_importable() -> bool:
+    global _deps_ok
+    if _deps_ok is None:
+        try:
+            import ctranslate2  # noqa: F401
+            import sentencepiece  # noqa: F401
+            _deps_ok = True
+        except Exception:
+            _deps_ok = False
+    return _deps_ok
+
+
 def he_en_supported() -> bool:
-    """Whether the he->en path *can* run — deps importable and the model either
-    already on disk or fetchable on first use. Cheap: no download, no model load.
+    """Whether the he->en path *can* run — deps importable and not already known
+    broken. Cheap: memoised import check, no download, no model load.
 
     ``/health`` uses this to decide whether to advertise Hebrew translation.
     """
-    if _load_failed and not _model_present():
+    if _load_failed:
         return False
-    try:
-        import ctranslate2  # noqa: F401
-        import sentencepiece  # noqa: F401
-    except Exception:
-        return False
-    return True
+    return _deps_importable()
 
 
 def _model_present() -> bool:
-    return (_MODEL_DIR / "model.bin").is_file() and \
-           (_MODEL_DIR / "source.spm").is_file() and \
-           (_MODEL_DIR / "target.spm").is_file()
+    return all((_MODEL_DIR / f).is_file() for f in _MODEL_FILES)
 
 
 def _safe_extract(tar: tarfile.TarFile, dest: Path) -> None:
@@ -107,32 +121,34 @@ def ensure_model() -> bool:
     _MODEL_DIR.parent.mkdir(parents=True, exist_ok=True)
     print(f"[translate] fetching he->en model ({url})...", file=sys.stderr, flush=True)
 
+    # Verify against the canonical hash, or a caller-supplied one for a mirror.
+    # Skip only when a mirror URL is set with no companion hash.
+    expected = _ASSET_SHA256 if _ASSET_URL_ENV not in os.environ \
+        else os.environ.get(_ASSET_SHA256_ENV, "")
+
     tmp_dir = Path(tempfile.mkdtemp(prefix="visper-mt-", dir=_MODEL_DIR.parent))
     tgz = tmp_dir / "model.tar.gz"
     try:
-        with urllib.request.urlopen(url) as resp, open(tgz, "wb") as fh:  # noqa: S310
+        with urllib.request.urlopen(url, timeout=30) as resp, open(tgz, "wb") as fh:  # noqa: S310
             digest = hashlib.sha256()
             while chunk := resp.read(1 << 20):
                 fh.write(chunk)
                 digest.update(chunk)
 
         got = digest.hexdigest()
-        # An env override is a deliberate local mirror — don't gate it on the
-        # checksum of the canonical release asset.
-        if _ASSET_URL_ENV not in os.environ and got != _ASSET_SHA256:
-            raise RuntimeError(
-                f"checksum mismatch: expected {_ASSET_SHA256}, got {got}")
+        if expected and got != expected:
+            raise RuntimeError(f"checksum mismatch: expected {expected}, got {got}")
 
         with tarfile.open(tgz, "r:gz") as tar:
             _safe_extract(tar, tmp_dir)
 
         extracted = tmp_dir / _MODEL_NAME
-        if not (extracted / "model.bin").is_file():
-            raise RuntimeError(f"archive did not contain {_MODEL_NAME}/model.bin")
+        missing = [f for f in _MODEL_FILES if not (extracted / f).is_file()]
+        if missing:
+            raise RuntimeError(f"archive is missing {missing}")
 
-        if _MODEL_DIR.exists():
-            return _model_present()
-        os.replace(extracted, _MODEL_DIR)  # atomic on the same filesystem
+        if not _MODEL_DIR.exists():
+            os.replace(extracted, _MODEL_DIR)  # atomic on the same filesystem
         return _model_present()
     finally:
         import shutil
@@ -144,7 +160,9 @@ def ensure_model() -> bool:
 # ---------------------------------------------------------------------------
 
 class HebrewEnglishTranslator:
-    """he → en text MT. Load once, reuse; not thread-safe for concurrent calls."""
+    """he → en text MT. Load once, reuse. ``ctranslate2.Translator`` serialises
+    concurrent ``translate_batch`` calls internally, so this is safe to share
+    across threads (e.g. two ``asyncio.to_thread`` translate requests)."""
 
     def __init__(self, model_dir: Path = _MODEL_DIR, *,
                  device: str = "cpu", compute_type: str = "int8",
@@ -180,7 +198,8 @@ class HebrewEnglishTranslator:
 
         out = list(texts)
         for i, res in zip(idx, results):
-            hyp = [t for t in res.hypotheses[0] if t not in _SPECIALS]
+            hyps = getattr(res, "hypotheses", None) or [[]]
+            hyp = [t for t in hyps[0] if t not in _SPECIALS]
             out[i] = self._sp_tgt.decode(hyp).strip()
         return out
 
