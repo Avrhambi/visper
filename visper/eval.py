@@ -65,23 +65,44 @@ def _metrics(reference: str, hypothesis: str) -> tuple[float, float]:
     return (jiwer.wer(reference, hypothesis), jiwer.cer(reference, hypothesis))
 
 
+def _eval_engine(language: str):
+    """The engine used for accuracy runs.
+
+    Pinned to CPU int8 through the shipped venv-worker runtime (``.venvs/cpu``)
+    when that venv exists, else in-process CPU. Never CUDA: the speed device
+    varies per machine and only matters for tier auto-selection, which we
+    override explicitly here — the decoding math itself is device-independent.
+    """
+    from visper.api import _get_router
+    from visper import venv_manager
+
+    cfg: dict = {"device": "cpu", "compute_type": "int8",
+                 "cpu_threads": 4, "num_workers": 1, "omp_threads": 4}
+    if venv_manager.venv_exists("cpu"):
+        cfg["venv_path"] = str(venv_manager.venv_path("cpu"))
+    return _get_router(cfg).get(language)
+
+
 def evaluate(
     dataset_dirs: list[Path],
     language: str = "he",
+    tier: str = "balanced",
     limit: Optional[int] = None,
     seed: int = 0,
     per_file: bool = False,
 ) -> dict:
-    """Transcribe every pair and return aggregate + per-dataset WER/CER."""
-    from visper.api import _get_router
-    from visper.benchmark import get_best_config
+    """Transcribe every pair and return aggregate + per-dataset WER/CER.
+
+    ``tier`` fixes the decoding tier (beam size, temperature schedule) so the
+    reported WER is reproducible. Left to ``bucket="auto"`` it would swing with
+    the host's RTF headroom — a GPU machine lands on ``accurate``, a CPU one on
+    ``fast`` — and an unlabelled WER is not a reportable number.
+    """
+    from visper.benchmark import _audio_duration, _bucket_for
+    from visper.params import get_params_for_tier
     from visper.postprocess import normalize_text
 
-    # Accuracy is virtually identical across device/compute_type, so never block
-    # on a first-run speed benchmark here — use the cached result if one exists,
-    # otherwise the hardware heuristic. Run `visper-benchmark --fast` first if
-    # you want the measured config.
-    engine = _get_router(get_best_config("medium", auto_benchmark=False)).get(language)
+    engine = _eval_engine(language)
 
     datasets: dict[str, dict] = {}
     rng = random.Random(seed)
@@ -100,8 +121,11 @@ def evaluate(
         print(f"[eval] {label}: {len(pairs)} file(s)", file=sys.stderr)
         for audio, ref_path in pairs:
             reference = _clean_reference(ref_path.read_text(encoding="utf-8"), language)
+            bucket = _bucket_for(_audio_duration(audio) or 30.0)
+            tp = get_params_for_tier(tier, bucket, {})
             t0 = time.time()
-            result = engine.transcribe(str(audio), bucket="auto", language=language)
+            result = engine.transcribe(str(audio), bucket=bucket, language=language,
+                                       _tier_override=tp)
             hypothesis = normalize_text(result.text, language)
             w, c = _metrics(reference, hypothesis)
             wers.append(w)
@@ -119,6 +143,7 @@ def evaluate(
 
     return {
         "language": language,
+        "tier": tier,
         "datasets": datasets,
         "model": getattr(engine, "_model_id", "?"),
     }
@@ -126,7 +151,7 @@ def evaluate(
 
 def format_markdown(report: dict) -> str:
     lines = [
-        f"### Accuracy — `{report['model']}` ({report['language']})",
+        f"### Accuracy — `{report['model']}` ({report['language']}, {report.get('tier', '?')} tier)",
         "",
         "| Dataset | Files | WER | CER |",
         "|---|--:|--:|--:|",
@@ -144,6 +169,9 @@ def main() -> None:
     parser.add_argument("datasets", nargs="+", type=Path,
                         help="Dataset directories (each with audios/ + refs/ or flat)")
     parser.add_argument("--language", default="he")
+    parser.add_argument("--tier", default="balanced",
+                        choices=["fast", "light", "balanced", "accurate"],
+                        help="Decoding tier to pin (default: balanced)")
     parser.add_argument("--limit", type=int, default=None,
                         help="Sample at most N files per dataset (default: all)")
     parser.add_argument("--seed", type=int, default=0, help="Sampling seed")
@@ -151,8 +179,8 @@ def main() -> None:
     parser.add_argument("--out", type=Path, help="Write the markdown table to this file")
     args = parser.parse_args()
 
-    report = evaluate(args.datasets, language=args.language, limit=args.limit,
-                      seed=args.seed, per_file=args.per_file)
+    report = evaluate(args.datasets, language=args.language, tier=args.tier,
+                      limit=args.limit, seed=args.seed, per_file=args.per_file)
 
     if args.per_file:
         for label, d in report["datasets"].items():

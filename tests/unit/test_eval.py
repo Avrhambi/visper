@@ -32,7 +32,8 @@ def test_clean_reference_strips_annotations_and_normalizes():
 
 
 def test_format_markdown_shape():
-    report = {"language": "he", "model": "m",
+    report = {"language": "he", "model": "m", "tier": "balanced",
               "datasets": {"coish": {"n": 12, "wer": 0.409, "cer": 0.274, "rows": []}}}
     md = format_markdown(report)
     assert "| coish | 12 | 0.409 | 0.274 |" in md
+    assert "balanced tier" in md
