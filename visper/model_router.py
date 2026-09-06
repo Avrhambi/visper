@@ -10,7 +10,10 @@ from __future__ import annotations
 import sys
 import threading
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from visper.transcriber import Transcriber
 
 ROOT = Path(__file__).parent.parent
 
@@ -70,7 +73,7 @@ class ModelRouter:
         defaults = _DEFAULT_MLX_MODELS if device == "mlx" else _DEFAULT_MODELS
         return model_map.get(language, model_map.get("_default", defaults["_default"]))
 
-    def get(self, language: str) -> object:
+    def get(self, language: str) -> "Transcriber":
         from visper.transcriber import Transcriber
         target = self.resolve_model_id(language)
         with self._lock:

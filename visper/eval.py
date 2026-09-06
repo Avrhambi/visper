@@ -73,10 +73,15 @@ def evaluate(
     per_file: bool = False,
 ) -> dict:
     """Transcribe every pair and return aggregate + per-dataset WER/CER."""
-    from visper.api import _get_config, _get_router
+    from visper.api import _get_router
+    from visper.benchmark import get_best_config
     from visper.postprocess import normalize_text
 
-    engine = _get_router(_get_config("medium")).get(language)
+    # Accuracy is virtually identical across device/compute_type, so never block
+    # on a first-run speed benchmark here — use the cached result if one exists,
+    # otherwise the hardware heuristic. Run `visper-benchmark --fast` first if
+    # you want the measured config.
+    engine = _get_router(get_best_config("medium", auto_benchmark=False)).get(language)
 
     datasets: dict[str, dict] = {}
     rng = random.Random(seed)
