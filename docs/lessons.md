@@ -53,3 +53,40 @@ recreate. The lock clears within ~1–2 s.
 
 **Gotcha:** `rmtree(ignore_errors=True)` is not "delete the tree" — it's "try,
 shrug on failure". Anywhere a later step assumes the path is gone, poll for it.
+
+---
+
+## 2026-09-07 — visper-eval WER was inflated ~15% relative by punctuation
+
+**What broke:** spot-checking `visper-eval` output, the Hebrew `short` (Knesset)
+WER read ~0.30 where a manual diff of hyp vs ref looked more like ~0.26. Every
+run also cost a full multi-hour re-transcribe just to try a scoring tweak.
+
+**Root cause:** `_metrics` scored the shipped `normalize_text` output directly.
+`normalize_text` deliberately keeps punctuation (users want it), but every
+reference corpus here (`coish`, `short`, `long`) carries **zero** punctuation.
+So each correctly-emitted comma/period/maqaf counted as an insertion error.
+WER is conventionally punctuation-insensitive; this was a scoring artifact, not
+model error.
+
+**Fix (`dfe4337`):** a symmetric `_for_scoring` pass (lowercase + strip
+everything non-`\w\s`, Unicode-aware so Hebrew letters/digits survive) applied
+to **both** sides inside `_metrics` only. The shipped normalizer is unchanged.
+`--out` now also writes a `<out>.json` sidecar with every ref/hyp pair, and
+`--rescore SIDECAR.json` recomputes the table in seconds — a scoring change no
+longer means re-transcribing.
+
+**Gotchas carried out of this:**
+- Reference corpora for ASR eval frequently have no punctuation and no casing.
+  Always score with a symmetric normalization pass that is *separate* from the
+  product's own text normalization. Don't reuse the shipping normalizer for
+  metrics.
+- WER **distribution shape** tells you what you're measuring: a smooth unimodal
+  spread (e.g. `short`: 0.14–0.39) is genuine difficulty and the mean is real;
+  a tight low cluster + a high outlier tail usually means some ref/audio pairs
+  are misaligned and the mean is measuring corpus noise. `_summarize` now
+  reports min/p25/median/p75/max so the README can tell which it's quoting.
+- `coish` (CoSIH) is a spontaneous-conversation **linguistics** corpus, not an
+  ASR benchmark — high WER there is the transcription convention (fillers,
+  overlap, phonetic spelling), not model failure. Report it as a limitations
+  data point, never a headline number.
