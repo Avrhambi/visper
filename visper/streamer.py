@@ -81,20 +81,23 @@ class LiveStreamer:
         self._load_config()
 
     def _load_config(self):
+        # Defaults first so every attribute is always set — even if the read fails.
+        self._vad_min_silence_ms = 300
+        self._max_chunk_s = MAX_CHUNK_S
+        self._stream_flush_on_silence = True
+        self._noise_calibration_seconds = 1.5
+        self._overlap_samples = int(2.0 * SAMPLE_RATE)
         try:
-            import yaml
-            path = ROOT / "config.yaml"
-            if path.exists():
-                cfg = yaml.safe_load(path.read_text()) or {}
-                self._vad_min_silence_ms = cfg.get("vad_min_silence_ms", 300)
-                self._max_chunk_s = cfg.get("max_chunk_seconds", MAX_CHUNK_S)
-                self._stream_flush_on_silence = cfg.get("stream_flush_on_silence", True)
-                self._noise_calibration_seconds = cfg.get("noise_calibration_seconds", 1.5)
-                overlap_s = float(cfg.get("overlap_seconds", 2.0))
-                self._overlap_samples = int(overlap_s * SAMPLE_RATE) if overlap_s > 0 else 0
+            from visper._config import load_config
+            cfg = load_config()
+            self._vad_min_silence_ms = cfg.get("vad_min_silence_ms", self._vad_min_silence_ms)
+            self._max_chunk_s = cfg.get("max_chunk_seconds", self._max_chunk_s)
+            self._stream_flush_on_silence = cfg.get("stream_flush_on_silence", True)
+            self._noise_calibration_seconds = cfg.get("noise_calibration_seconds", 1.5)
+            overlap_s = float(cfg.get("overlap_seconds", 2.0))
+            self._overlap_samples = int(overlap_s * SAMPLE_RATE) if overlap_s > 0 else 0
         except Exception:
-            self._noise_calibration_seconds = 1.5
-            self._overlap_samples = int(2.0 * SAMPLE_RATE)
+            pass
         from visper.resource import get_idle_unload_seconds
         self._idle_unload_seconds = get_idle_unload_seconds()
 

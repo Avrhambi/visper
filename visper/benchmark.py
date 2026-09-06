@@ -1044,14 +1044,8 @@ def _apply_igpu_preference(best: dict, results: dict, margin: float) -> dict:
 # ---------------------------------------------------------------------------
 
 def _load_config_yaml() -> dict:
-    try:
-        import yaml
-        path = ROOT / "config.yaml"
-        if path.exists():
-            return yaml.safe_load(path.read_text()) or {}
-    except Exception:
-        pass
-    return {}
+    from visper._config import load_config
+    return load_config()
 
 
 # ---------------------------------------------------------------------------
@@ -1280,13 +1274,18 @@ def force_rebenchmark() -> None:
 # ---------------------------------------------------------------------------
 
 
-def get_best_config(bucket: str) -> dict:
+def get_best_config(bucket: str, auto_benchmark: bool = True) -> dict:
     """
     Returns the empirically best config for the given bucket.
 
     If skip_benchmark=true in config.yaml AND force_device + force_compute_type
     are both set, returns the manual config immediately without touching
-    benchmark_results.json.  Otherwise auto-triggers benchmark if missing/empty.
+    benchmark_results.json.  Otherwise auto-triggers the benchmark if
+    missing/empty — unless ``auto_benchmark=False``, in which case a heuristic
+    config is derived from hardware detection alone (no inference, no file
+    written).  Callers on a latency-sensitive path (``GET /health``, warmup,
+    a bare ``import visper``) pass ``auto_benchmark=False`` so they never block
+    for minutes on a first run.
 
     Falls back to nearest bucket if requested one has no result.
     Respects force_device / force_compute_type / force_cpu_threads from config.yaml.
@@ -1309,12 +1308,25 @@ def get_best_config(bucket: str) -> dict:
         }
         return cfg
 
-    if not RESULTS_PATH.exists():
-        run_benchmark()
-    else:
-        data = json.loads(RESULTS_PATH.read_text())
-        if all(v is None for v in data.get("best", {}).values()):
-            run_benchmark(force=True)
+    results_missing = not RESULTS_PATH.exists()
+    results_empty = False
+    if not results_missing:
+        try:
+            data = json.loads(RESULTS_PATH.read_text())
+            results_empty = all(v is None for v in data.get("best", {}).values())
+        except Exception:
+            results_empty = True
+
+    if results_missing or results_empty:
+        if not auto_benchmark:
+            # Latency-sensitive caller — never run inference here.
+            estimated = _estimate_config_heuristic(_collect_hardware_info())
+            est_cfg = estimated.get(bucket) or next((c for c in estimated.values() if c), None)
+            if est_cfg:
+                return _apply_config_overrides(est_cfg)
+            return {"device": "cpu", "compute_type": "int8", "cpu_threads": 4,
+                    "num_workers": 1, "omp_threads": 4, "status": "estimated"}
+        run_benchmark(force=results_empty)
 
     data = json.loads(RESULTS_PATH.read_text())
     best = data.get("best", {})

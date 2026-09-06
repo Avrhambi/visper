@@ -50,6 +50,9 @@ visper-help      = "visper._cli:help"
 where = ["."]
 include = ["visper"]
 
+[tool.setuptools.package-data]
+visper = ["config.yaml"]
+
 [tool.setuptools.dynamic]
 version = { attr = "visper.__version__" }
 

@@ -123,14 +123,8 @@ class WhisperParams:
 
 
 def _load_user_config() -> dict:
-    try:
-        import yaml
-        path = ROOT / "config.yaml"
-        if path.exists():
-            return yaml.safe_load(path.read_text()) or {}
-    except Exception:
-        pass
-    return {}
+    from visper._config import load_config
+    return load_config()
 
 
 def _rtf_headroom(hw_config: dict, bucket: str) -> Optional[float]:

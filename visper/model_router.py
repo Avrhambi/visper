@@ -35,16 +35,14 @@ _DEFAULT_MLX_MODELS: dict[str, str] = {
 def _load_router_config(device: str = "") -> tuple[dict[str, str], str]:
     """Return (model_map, force_model) parsed from config.yaml in one read."""
     try:
-        import yaml
-        path = ROOT / "config.yaml"
-        if path.exists():
-            cfg = yaml.safe_load(path.read_text()) or {}
-            force = cfg.get("force_model", "") or ""
-            if device == "mlx":
-                model_map = {**_DEFAULT_MLX_MODELS, **(cfg.get("models_mlx") or {})}
-            else:
-                model_map = {**_DEFAULT_MODELS, **(cfg.get("models") or {})}
-            return model_map, force
+        from visper._config import load_config
+        cfg = load_config()
+        force = cfg.get("force_model", "") or ""
+        if device == "mlx":
+            model_map = {**_DEFAULT_MLX_MODELS, **(cfg.get("models_mlx") or {})}
+        else:
+            model_map = {**_DEFAULT_MODELS, **(cfg.get("models") or {})}
+        return model_map, force
     except Exception:
         pass
     defaults = _DEFAULT_MLX_MODELS if device == "mlx" else _DEFAULT_MODELS

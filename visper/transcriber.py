@@ -70,18 +70,16 @@ class Transcriber:
         self._highpass = False
         self._hotwords: str = ""
         try:
-            import yaml as _yaml
-            _cfg_path = ROOT / "config.yaml"
-            if _cfg_path.exists():
-                _ucfg = _yaml.safe_load(_cfg_path.read_text()) or {}
-                self._language = _ucfg.get("language", "he")
-                self._vad_filter = _ucfg.get("vad_filter", True)
-                self._vad_min_silence_ms = _ucfg.get("vad_min_silence_ms", 300)
-                self._vad_speech_pad_ms = _ucfg.get("vad_speech_pad_ms", 200)
-                self._denoise = _ucfg.get("audio_denoise", False)
-                self._normalize_volume = _ucfg.get("audio_normalize", False)
-                self._highpass = _ucfg.get("audio_highpass", False)
-                self._hotwords = _ucfg.get("hotwords", "") or ""
+            from visper._config import load_config
+            _ucfg = load_config()
+            self._language = _ucfg.get("language", "he")
+            self._vad_filter = _ucfg.get("vad_filter", True)
+            self._vad_min_silence_ms = _ucfg.get("vad_min_silence_ms", 300)
+            self._vad_speech_pad_ms = _ucfg.get("vad_speech_pad_ms", 200)
+            self._denoise = _ucfg.get("audio_denoise", False)
+            self._normalize_volume = _ucfg.get("audio_normalize", False)
+            self._highpass = _ucfg.get("audio_highpass", False)
+            self._hotwords = _ucfg.get("hotwords", "") or ""
         except Exception:
             pass
         self._model_id = config.get("model_id", _FALLBACK_MODEL_ID)
