@@ -525,10 +525,10 @@ class Transcriber:
             try:
                 en = _one(seg.get("text", ""))
             except Exception:
-                en = ""
+                en = None       # sentinel: this segment must be retranslated below
             preview_en.append(en)
             if on_segment is not None:
-                on_segment({**seg, "he_text": seg.get("text", ""), "text": en})
+                on_segment({**seg, "he_text": seg.get("text", ""), "text": en or ""})
 
         _cb: Optional[Callable[[dict], None]] = _preview_cb if on_segment is not None else None
         he = self.transcribe(
@@ -542,7 +542,8 @@ class Transcriber:
             return he
 
         try:
-            if segments and len(preview_en) == len(segments):
+            if (segments and len(preview_en) == len(segments)
+                    and None not in preview_en):
                 en_texts = preview_en            # no retry — reuse the preview work
             elif segments:
                 en_texts = [normalize_text(t, "en") for t in
