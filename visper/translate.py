@@ -236,7 +236,8 @@ def get_hebrew_english_translator() -> Optional[HebrewEnglishTranslator]:
 
 def reset_cache() -> None:
     """Drop the cached translator (tests, or after a manual model install)."""
-    global _singleton, _load_failed
+    global _singleton, _load_failed, _deps_ok
     with _lock:
         _singleton = None
         _load_failed = False
+        _deps_ok = None
