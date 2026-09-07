@@ -62,7 +62,7 @@ visper/api.py: transcribe() / stream_transcribe() / transcribe_chunked()
 
 **`visper/postprocess.py`** — Hebrew-specific text normalization applied after Whisper output: diacritics removal, typographic quote substitution, script boundary spacing, trailing punctuation cleanup, duplicate word collapse.
 
-**`visper/worker.py`** — Subprocess worker, and the **default runtime** once a benchmark has stamped a `venv_path` into `benchmark_results.json` (the host Python is 3.14; `faster-whisper` wheels need 3.12). Spawned once by `Transcriber` and kept warm. Communicates over stdin/stdout with a JSON-line protocol. Also lets the engine run OpenVINO or CUDA in a venv with a different Python/package set than the caller.
+**`visper/worker.py`** — Subprocess worker, and the **default runtime** once a benchmark has stamped a `venv_path` into `benchmark_results.json` (the host Python is 3.14; `faster-whisper` wheels need 3.12). Spawned once by `Transcriber` and kept warm. Communicates over stdin/stdout with a JSON-line protocol — one request, one response carrying the full segment list (no incremental streaming; `Transcriber` replays the segments through the caller's `on_segment` after decode). Also lets the engine run OpenVINO or CUDA in a venv with a different Python/package set than the caller.
 
 ---
 
