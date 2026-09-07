@@ -88,7 +88,7 @@ TranscriptResult { text, segments, audio_duration, rtf, tier_used, backend, he_t
  ├── visper/_cli.py        →  visper-file  /  visper-live
  ├── visper/server.py      →  FastAPI: POST /transcribe, /transcribe/stream (SSE),
  │                             WS /ws/live  — serves visper/web/index.html at /
- └── visper/api.py         →  transcribe() / stream_transcribe() / transcribe_chunked()
+ └── visper/api.py         →  transcribe() / stream_transcribe()
 ```
 
 ### End-to-end walk — `POST /transcribe` with a Hebrew MP3, `translate=1`
@@ -96,7 +96,7 @@ TranscriptResult { text, segments, audio_duration, rtf, tier_used, backend, he_t
 1. **`server.py:/transcribe`** streams the upload to a temp file (size-capped),
    resolves the duration bucket (`short <10s`, `medium <30s`, `long <60s`,
    `extended ≥60s`).
-2. **`api.transcribe_chunked`** calls `_get_config(bucket)` →
+2. **`api.transcribe`** (with an `on_segment` callback) calls `_get_config(bucket)` →
    `benchmark.get_best_config(bucket)` reads `benchmark_results.json` and returns
    `{device, compute_type, venv_path, ...}` for the fastest measured path.
 3. **`ModelRouter.get("he")`** resolves `he → ivrit-ai/whisper-large-v3-turbo-ct2`
@@ -324,10 +324,10 @@ visper-server                                      # http://127.0.0.1:8000
 ```
 
 ```python
-from visper import transcribe, transcribe_chunked
-text = transcribe("audio.mp3")                     # Hebrew
-en   = transcribe_chunked("audio.mp3", on_segment=print,
-                          language="he", task="translate")
+from visper import transcribe
+text = transcribe("audio.mp3")                     # Hebrew, full text
+en   = transcribe("audio.mp3", on_segment=print,   # he→en, live per-segment
+                  language="he", task="translate")
 ```
 
 ### Tests

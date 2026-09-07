@@ -178,7 +178,7 @@ async def transcribe_endpoint(file: UploadFile = File(...), language: str = Form
     task = "translate" if translate in ("1", "true", "yes") else "transcribe"
     try:
         import soundfile as sf
-        from visper.api import transcribe_chunked
+        from visper.api import transcribe
 
         try:
             audio_duration = sf.info(str(tmp_path)).duration
@@ -191,8 +191,8 @@ async def transcribe_endpoint(file: UploadFile = File(...), language: str = Form
         segments: list = []
         t0 = time.monotonic()
         text = await asyncio.to_thread(
-            transcribe_chunked, str(tmp_path), segments.append, bucket, None, language,
-            initial_prompt or None, task,
+            transcribe, str(tmp_path), on_segment=segments.append, bucket=bucket,
+            language=language, initial_prompt=initial_prompt or None, task=task,
         )
         elapsed = time.monotonic() - t0
 
@@ -217,7 +217,7 @@ async def transcribe_stream(request: Request, file: UploadFile = File(...), lang
     def _run() -> None:
         try:
             import soundfile as sf
-            from visper.api import transcribe_chunked
+            from visper.api import transcribe
             try:
                 audio_duration = sf.info(str(tmp_path)).duration
             except Exception:
@@ -229,10 +229,10 @@ async def transcribe_stream(request: Request, file: UploadFile = File(...), lang
             _norm_lang = "en" if task == "translate" else language
             _norm = lambda t: normalize_text(t, _norm_lang)
             t0 = time.monotonic()
-            full_text = transcribe_chunked(
+            full_text = transcribe(
                 str(tmp_path),
-                lambda seg: q.put({**seg, "text": _norm(seg["text"])}),
-                bucket,
+                on_segment=lambda seg: q.put({**seg, "text": _norm(seg["text"])}),
+                bucket=bucket,
                 is_aborted=lambda: abort_event.is_set(),
                 language=language,
                 initial_prompt=initial_prompt or None,
@@ -250,7 +250,7 @@ async def transcribe_stream(request: Request, file: UploadFile = File(...), lang
         finally:
             q.put(_sentinel)
             # Sole owner of the temp file: this thread is the only reader and
-            # always runs to completion (abort_event makes transcribe_chunked
+            # always runs to completion (abort_event makes transcribe()
             # bail at the next segment). _generate() can't clean up reliably —
             # the client may drop the connection before iterating the response.
             tmp_path.unlink(missing_ok=True)
