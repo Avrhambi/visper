@@ -3,7 +3,7 @@ visper/api.py
 --------------------
 Stable public API for cross-project use.
 
-    from visper import transcribe, stream_transcribe, transcribe_chunked
+    from visper import transcribe, stream_transcribe
 """
 from __future__ import annotations
 
@@ -72,9 +72,10 @@ def _get_router(hw_config: dict):
     return _router
 
 
-def transcribe_chunked(
+def transcribe(
     source: Union[str, Path, np.ndarray],
-    on_segment: Callable[[dict], None],
+    *,
+    on_segment: Optional[Callable[[dict], None]] = None,
     bucket: str = "auto",
     is_aborted: Optional[Callable[[], bool]] = None,
     language: str = "he",
@@ -82,20 +83,27 @@ def transcribe_chunked(
     task: str = "transcribe",
 ) -> str:
     """
-    Like transcribe() but calls on_segment({"start", "end", "text"}) for each
-    Whisper segment as it is decoded, enabling progress feedback on long files.
+    Transcribe speech from a file or audio array. Hebrew by default.
 
     Parameters
     ----------
     source : str | Path | np.ndarray
         File path or float32 numpy array at 16 kHz.
-    on_segment : callable(seg: dict)
-        Called once per decoded segment with keys 'start', 'end', 'text'.
+    on_segment : callable(seg: dict), optional
+        When given, called once per decoded Whisper segment with keys
+        'start', 'end', 'text' — enabling progress feedback on long files.
         Runs on the calling thread (blocking, single-threaded).
     bucket : str
+        'short' (<10s), 'medium' (10-30s), 'long' (30-60s), 'extended' (>60s).
         'auto' = detect duration and pick the correct bucket.
     is_aborted : callable() -> bool, optional
         Checked between segments. If returns True, transcription stops early.
+    language : str
+        Source language for the decode. Defaults to Hebrew.
+    initial_prompt : str, optional
+        Text prompt to bias decoding (names, jargon).
+    task : str
+        'transcribe' (default) or 'translate' for he->en output.
 
     Returns
     -------
@@ -104,43 +112,12 @@ def transcribe_chunked(
     resolved_bucket = _resolve_bucket(source, bucket)
     config = _get_config(resolved_bucket)
     engine = _get_router(config).get(language)
-    result = engine.transcribe(source, bucket=resolved_bucket, on_segment=on_segment,
-                               is_aborted=is_aborted, language=language,
-                               initial_prompt=initial_prompt, task=task)
-    return result.text
-
-
-def transcribe(
-    source: Union[str, Path, np.ndarray],
-    bucket: str = "auto",
-    is_aborted: Optional[Callable[[], bool]] = None,
-) -> str:
-    """
-    Transcribe Hebrew speech from a file or audio array.
-
-    Parameters
-    ----------
-    source : str | Path | np.ndarray
-        File path or float32 numpy array at 16 kHz.
-    bucket : str
-        'short' (<10s), 'medium' (10-30s), 'long' (30-60s), 'extended' (>60s).
-        'auto' = detect duration and pick the correct bucket.
-    is_aborted : callable() -> bool, optional
-        Checked between segments. If returns True, transcription stops early.
-
-    Returns
-    -------
-    str : Transcribed Hebrew text.
-    """
-    resolved_bucket = _resolve_bucket(source, bucket)
-    config = _get_config(resolved_bucket)
-    language = "he"  # transcribe() is Hebrew-only; use transcribe_chunked() for other languages
-    engine = _get_router(config).get(language)
     # Pass language through so the decode token matches the routed model — else
     # engine.transcribe falls back to self._language (config.yaml) and a
     # `language: en` there would feed the Hebrew CT2 model an <|en|> token.
-    result = engine.transcribe(source, bucket=resolved_bucket, is_aborted=is_aborted,
-                               language=language)
+    result = engine.transcribe(source, bucket=resolved_bucket, on_segment=on_segment,
+                               is_aborted=is_aborted, language=language,
+                               initial_prompt=initial_prompt, task=task)
     return result.text
 
 

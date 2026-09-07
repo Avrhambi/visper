@@ -129,8 +129,8 @@ Marian degrades on multi-sentence input. All segments go in a single
   pass is a small fraction of ASR time).
 - `TranscriptResult` gains `he_text: str = ""` (last field; the only legal
   position — every existing field is non-default).
-- `api.transcribe_chunked(..., task="translate", language="he")` — entry point
-  unchanged. `_norm_lang` already switches to `"en"` for the post-normaliser.
+- `api.transcribe(..., on_segment=cb, task="translate", language="he")` — entry
+  point. `_norm_lang` already switches to `"en"` for the post-normaliser.
 
 ### Routing / health
 

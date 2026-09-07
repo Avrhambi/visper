@@ -32,7 +32,7 @@ visper/postprocess.py
 TranscriptResult {text, segments, rtf, tier_used, backend, he_text, ...}
         │
         ▼
-visper/api.py: transcribe() / stream_transcribe() / transcribe_chunked()
+visper/api.py: transcribe() / stream_transcribe()
         │
         ├── visper/_cli.py      (visper-file / visper-live / visper-benchmark / visper-eval)
         └── visper/server.py    (FastAPI: visper-server)
@@ -56,7 +56,7 @@ visper/api.py: transcribe() / stream_transcribe() / transcribe_chunked()
 
 **`visper/eval.py`** — `visper-eval`: local WER/CER over reference corpora with `jiwer`. Scores both reference and hypothesis through the shipped normalizer plus a symmetric punctuation/case strip (reference corpora carry no punctuation). Writes a JSON sidecar of every ref/hyp pair so `--rescore` recomputes the table without re-transcribing.
 
-**`visper/api.py`** — Thin, stable public interface: `transcribe()`, `stream_transcribe()`, `transcribe_chunked()`. Handles duration detection and bucket resolution. Routes to the correct `Transcriber` via `ModelRouter`. These signatures are frozen — external callers depend on them.
+**`visper/api.py`** — Thin, stable public interface: `transcribe()` and `stream_transcribe()`. Handles duration detection and bucket resolution. Routes to the correct `Transcriber` via `ModelRouter`. External callers depend on these signatures, so they change only on a major version bump: 2.0.0 folded the old `transcribe_chunked()` into `transcribe()` as an optional `on_segment` callback and made every argument after `source` keyword-only.
 
 **`visper/streamer.py`** — Implements the two-thread live pipeline. Producer thread reads mic or file chunks, applies RMS energy VAD, and enqueues audio to `queue.Queue(maxsize=4)`. Consumer thread calls `Transcriber.transcribe(chunk, bucket="streaming")` and invokes `on_transcript(text, is_final)`. Includes sliding window overlap and boundary deduplication.
 
