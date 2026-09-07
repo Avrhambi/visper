@@ -150,14 +150,22 @@ def health():
         # translation is still offered when either a translate-capable base
         # model is in play (MLX turbo) or the two-stage he->en MT path is
         # available (visper/translate.py) — else the toggle is hidden.
-        from visper.translate import he_en_supported
+        from visper.translate import he_en_supported, _model_present
         no_translate = [] if (device == "mlx" or he_en_supported()) else ["he"]
+        # he->en works the moment it's advertised, but stage 2 (the dedicated MT
+        # model) is fetched on first use — until then a he translate request
+        # falls back to Whisper's weaker native translate. The UI uses this to
+        # show a "first use downloads ~210 MB" affordance.
+        he_en_pending_download = (
+            device != "mlx" and "he" not in no_translate and not _model_present()
+        )
         return {
             "status": "ok",
             "device": device,
             "compute_type": cfg.get("compute_type"),
             "model": model,
             "no_translate": no_translate,
+            "he_en_pending_download": he_en_pending_download,
         }
     except Exception as e:
         log.exception("Health check failed")

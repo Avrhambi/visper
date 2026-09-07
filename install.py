@@ -203,6 +203,29 @@ def download_model():
         return False
 
 
+def download_he_en_model():
+    """Fetch the he->en translation model (~210 MB) so the first Hebrew→English
+    request doesn't fall back to Whisper's weaker native translate. Non-fatal:
+    it is also fetched on first use."""
+    try:
+        from visper.translate import _model_present, ensure_model
+    except Exception:
+        return
+    if _model_present():
+        print("[Setup] he->en translation model already present — skipping.")
+        return
+    print("[Setup] Downloading he->en translation model (~210 MB)...")
+    try:
+        if ensure_model():
+            print("[Setup] he->en translation model ready.")
+        else:
+            print("[Setup] he->en model not available — Hebrew→English will use "
+                  "the fallback translate path until it downloads on first use.")
+    except Exception as e:
+        print(f"[Setup] he->en model download skipped ({e}). It will be fetched "
+              "on first Hebrew→English use.")
+
+
 def install_requirements():
     """Install base requirements + server extras, then CUDA extras if GPU is available."""
     print("[Setup] Installing base requirements...")
@@ -313,6 +336,10 @@ if __name__ == "__main__":
     # Step 3: Download model into HF cache (skips if already present)
     print("[Setup] Checking model cache...")
     download_model()
+
+    # Step 3b: Pre-fetch the he->en translation model (non-fatal)
+    print("[Setup] Checking he->en translation model...")
+    download_he_en_model()
 
     # Step 4: Benchmark if needed
     results_path = pathlib.Path("benchmark_results.json")

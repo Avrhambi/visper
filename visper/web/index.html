@@ -1100,6 +1100,8 @@
   // Languages where translation is blocked — populated from /health.
   // Default to blocking Hebrew until server confirms (fine-tune model on Windows/Linux).
   let noTranslateLangs = new Set(['he']);
+  // True when he->en is available but its MT model still downloads on first use.
+  let heEnPendingDownload = false;
   let fileList = [];
   let fileQueueIndex = 0;
   let initialPrompt = '';
@@ -1159,7 +1161,12 @@
     const targetTxt   = document.getElementById('targetLangText');
     if (canTranslate) {
       if (optTargetEn) optTargetEn.style.display = 'block';
-      if (targetBtn) { targetBtn.disabled = false; targetBtn.style.opacity = '1'; targetBtn.style.cursor = 'pointer'; }
+      if (targetBtn) {
+        targetBtn.disabled = false; targetBtn.style.opacity = '1'; targetBtn.style.cursor = 'pointer';
+        targetBtn.title = (heEnPendingDownload && selectedLanguage === 'he')
+          ? 'First Hebrew→English run downloads a ~210 MB translation model'
+          : '';
+      }
     } else {
       if (optTargetEn) optTargetEn.style.display = 'none';
       if (translateToEn) {
@@ -1272,6 +1279,7 @@
         text.textContent = modelShort ? `${d.device} · ${modelShort}` : `מנוע פעיל: ${d.device}`;
         // Update which languages block translation, then refresh the translate UI
         noTranslateLangs = new Set(Array.isArray(d.no_translate) ? d.no_translate : ['he']);
+        heEnPendingDownload = d.he_en_pending_download === true;
         _refreshTranslateAvailability();
       } else {
         text.textContent = "שגיאת מנוע";
