@@ -266,6 +266,27 @@ worker path is not affected (it replays post-retry segments). Low probability, l
   CT2 CPU`, MLX prepended as primary on Apple). Issues: #1 (traceability), #2, #3, #7, #9,
   #10.
 
+## Resolution (2026-09-07, same session)
+
+| # | Finding | Resolution | Commit |
+|--:|---|---|---|
+| 1 | §5/§6 numbers untraceable; stale `eval_results.md` | committed `docs/benchmarks/` evidence bundle; `--rescore` reproduces §5; deleted the stale file | `c493033` |
+| 2 | `--report` prints stored (stale) tier | `format_report_table()` recomputes from RTF | `65d96bd` |
+| 3 | web UI absent from sdist/wheel | `git mv web visper/web`; package-data; verified in both artifacts | `cefb463` |
+| 4 | `/health` over-advertises he→en | added `he_en_pending_download`; UI tooltip; `install.py` pre-fetch | `3f0ab64` |
+| 5 | vocab filename comment vs `_MODEL_FILES` | comment corrected; tarball verified to contain all five `_MODEL_FILES` | `b945597` |
+| 6 | in-process retry drops `hotwords` | added to `kwargs2` | `afef98e` |
+| 7 | abort is a no-op vs worker decode | documented in README §1 (between-request cancellation) | `ec21480` |
+| 8 | `/transcribe/stream` temp-file leak | worker thread is sole owner, unlinks in its `finally` | `bd00e0c` |
+| 9 | `sse-starlette` declared, unused | dropped from deps + README | `c8b00dd` |
+| 10 | 210/220 MB inconsistency | standardised on ~210 MB | `b945597` / `ec21480` |
+| 11 | preview reuse can serve pre-retry translations | reuse gated on preview↔final Hebrew text match | `b945597` |
+| — | venv-worker not respawned | documented as a known limitation in README §4 | `ec21480` |
+
+Still blocking merge: the `mt-he-en-v1` GitHub release asset must be published
+(the tarball is verified — sha256 matches `_ASSET_SHA256`, contents match
+`_MODEL_FILES` — so it is correct by construction once uploaded).
+
 ## Merge recommendation
 
 **Do not merge as-is, but the blockers are documentation/packaging, not engine
