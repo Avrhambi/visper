@@ -442,10 +442,12 @@ def _build_fallback_chain(hw_info: dict) -> tuple[dict, list[dict]]:
 
 
 def _auto_accuracy_tier(rtf: float) -> str:
-    if rtf * 4.5 < 0.85:
-        return "accurate"
-    if rtf * 1.8 < 0.85:
-        return "balanced"
+    # Mirror params.get_params() exactly — same budget, same multipliers, same
+    # tier order — so the reported tier matches the one selected at call time.
+    from visper.params import RTF_BUDGET, TIER_RTF_MULTIPLIERS
+    for tier in ("accurate", "balanced", "light"):
+        if rtf * TIER_RTF_MULTIPLIERS[tier] < RTF_BUDGET:
+            return tier
     return "fast"
 
 

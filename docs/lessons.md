@@ -90,3 +90,27 @@ longer means re-transcribing.
   ASR benchmark — high WER there is the transcription convention (fillers,
   overlap, phonetic spelling), not model failure. Report it as a limitations
   data point, never a headline number.
+
+---
+
+## 2026-09-07 — the benchmark reported a coarser accuracy tier than runs
+
+**What broke:** the `visper-benchmark --report` table (which the README quotes)
+showed the `short` bucket at the `fast` tier for a measured RTF of 0.558. But
+`params.get_params()` selects `light` for that same RTF at call time — so the
+README would have published a tier the engine never actually uses.
+
+**Root cause:** tier selection was implemented **twice**.
+`params.py:get_params()` walks `("accurate", "balanced", "light")` and falls to
+`fast`; `benchmark.py:_auto_accuracy_tier()` checked only `accurate` and
+`balanced` before falling to `fast` — it omitted the `light` branch entirely.
+Same policy, two copies, one stale.
+
+**Fix:** `_auto_accuracy_tier()` now imports `RTF_BUDGET` +
+`TIER_RTF_MULTIPLIERS` from `params.py` and runs the identical loop. The stored
+`auto_accuracy_tier` field is display-only (runtime reads `best[bucket].rtf` and
+recomputes), so no re-benchmark was needed — but the two must not drift.
+
+**Gotcha:** when a value appears both in a stored artifact and is recomputed at
+runtime, assume they will diverge unless one calls the other. Grep for every
+producer of a policy before quoting its output.
