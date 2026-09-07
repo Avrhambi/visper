@@ -31,11 +31,12 @@ produces accurate Hebrew transcripts on whatever hardware they have — a CUDA
 laptop, an Intel iGPU, an M-series Mac, or a plain CPU — without reading a
 tuning guide.
 
-Ship-readiness criteria (`docs/design/ship-readiness.md`):
+Ship-readiness criteria ([`docs/design/ship-readiness.md`](docs/design/ship-readiness.md)):
 
 - Every performance/accuracy number in this README comes from a committed
-  harness (`visper-eval`, `visper-benchmark`) — §5 and §6 are real runs on the
-  machine in §6, not estimates.
+  harness (`visper-eval`, `visper-benchmark`) — [§5](#5-accuracy) and
+  [§6](#6-performance) are real runs on the machine in [§6](#6-performance),
+  not estimates.
 - The default runtime (venv-worker subprocess) and the in-process path return
   identical results — same segments, same confidence-gated retry, same two-stage
   Hebrew translate. Two timing differences: per-segment callbacks fire live
@@ -125,7 +126,7 @@ TranscriptResult { text, segments, audio_duration, rtf, tier_used, backend, he_t
 
 | Layer | Technology | Rationale & trade-offs |
 |---|---|---|
-| Hebrew ASR | [`ivrit-ai/whisper-large-v3-turbo-ct2`][ivrit-model] | Purpose-built Hebrew fine-tune of [OpenAI Whisper][whisper] `large-v3-turbo` by [ivrit.ai][ivrit] — the community-standard open model for Hebrew ASR; measured WER in §5. Cost: transcription-only (no usable translate task), ~1.5 GB, no MLX build — Apple Silicon falls back to base [`large-v3-turbo`](https://huggingface.co/openai/whisper-large-v3-turbo). |
+| Hebrew ASR | [`ivrit-ai/whisper-large-v3-turbo-ct2`][ivrit-model] | Purpose-built Hebrew fine-tune of [OpenAI Whisper][whisper] `large-v3-turbo` by [ivrit.ai][ivrit] — the community-standard open model for Hebrew ASR; measured WER in [§5](#5-accuracy). Cost: transcription-only (no usable translate task), ~1.5 GB, no MLX build — Apple Silicon falls back to base [`large-v3-turbo`](https://huggingface.co/openai/whisper-large-v3-turbo). |
 | Inference runtime | [CTranslate2](https://github.com/OpenNMT/CTranslate2) (via [`faster-whisper`](https://github.com/SYSTRAN/faster-whisper)) | int8 quantised, deterministic decode, low memory footprint. Cost: a second quantised model format, and its device-specific native builds motivate the per-device venv below. |
 | Per-device isolation | venv-worker subprocess (`.venvs/<device>`) | Each accelerator has a heavy, conflicting native stack (CUDA + cuBLAS/cuDNN, or OpenVINO + optimum-intel + onnxruntime). The benchmark builds one venv per device and the decode runs there — the host env stays clean, and OpenVINO's hard Python 3.12 requirement doesn't pin the whole project. Communication is a JSON-line protocol over stdin/stdout. Cost: a process hop and a serialise per call; feature parity had to be re-implemented on the worker path. |
 | he→en translation | [`Helsinki-NLP/opus-mt-tc-big-he-en`](https://huggingface.co/Helsinki-NLP/opus-mt-tc-big-he-en) ([OPUS-MT](https://github.com/Helsinki-NLP/Opus-MT)) → CTranslate2 int8 | Dedicated MT beats asking the ASR fine-tune to translate. Reuses the CT2 runtime already loaded (no torch/transformers at runtime; `sentencepiece` is the only added dependency). Cost: a ~210 MB model fetched from a GitHub release asset on first Hebrew→English use (SHA-256 pinned); `install.py` pre-fetches it. |
@@ -175,7 +176,8 @@ dependency set. The worker is spawned once and kept warm; the cost is one
   but its model hasn't been fetched yet, so the UI never silently under-delivers.
 - **venv creation survives Windows AV locks** (`venv_manager.py`) — Defender
   briefly locks a freshly-copied `python.exe`; venv creation retries with
-  backoff and polls for real deletion before recreating. (`docs/lessons.md`.)
+  backoff and polls for real deletion before recreating.
+  ([`docs/lessons.md`](docs/lessons.md).)
 - **Streaming back-pressure** (`streamer.py`) — a bounded `queue.Queue(maxsize=4)`
   between the mic producer and the decode consumer; drop-oldest + warn after 3
   consecutive drops rather than unbounded latency growth.
@@ -195,7 +197,8 @@ corpora of different genres — reported **separately**, never pooled. Both
 reference and hypothesis pass through the shipped
 `visper.postprocess.normalize_text`, then a symmetric lowercase + punctuation
 strip for the score (the reference corpora carry no punctuation, so charging the
-model for a correctly-placed comma would be an artifact — see `docs/lessons.md`).
+model for a correctly-placed comma would be an artifact — see
+[`docs/lessons.md`](docs/lessons.md)).
 Median is given alongside the mean because a few misaligned or truncated pairs
 skew the mean on the harder sets. Files scored are a random sample, transcribed
 end-to-end with internal VAD chunking. The full run — every reference/hypothesis
@@ -236,8 +239,9 @@ per-call latency. `visper-benchmark --report` prints this table from
 | extended (≥60 s) | CUDA | int8_float32 | 4 | 0.158 | `accurate` |
 | streaming | CUDA | int8_float32 | 4 | 0.792 | `fast` |
 
-Auto tier is what `params.get_params()` selects for that measured RTF (§ below),
-recomputed per call — not a stored constant.
+Auto tier is what `params.get_params()` selects for that measured RTF
+([Accuracy tiers](#accuracy-tiers), below), recomputed per call — not a stored
+constant.
 
 The `short` bucket pays fixed per-call overhead (audio I/O + VAD + a single
 decode) that a <10 s clip can't amortise — hence RTF ~3× the longer buckets and
@@ -333,7 +337,8 @@ pip install -e ".[dev]"
 pytest                     # unit suite — no model download
 ```
 
-CI (`.github/workflows/ci.yml`) runs on every PR and every push to `master`:
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every PR and
+every push to `master`:
 `pip install -e ".[dev,server]"` on Python 3.10 / 3.11 / 3.12, an sdist build
 check, then `pytest`. No model download in CI.
 
