@@ -37,11 +37,13 @@ Ship-readiness criteria (`docs/design/ship-readiness.md`):
   machine in §6, not estimates.
 - The default runtime (venv-worker subprocess) and the in-process path return
   identical results — same segments, same confidence-gated retry, same two-stage
-  Hebrew translate. (Per-segment callbacks fire live during decode on the
-  in-process path and in streaming; the worker path replays the same segments in
-  one batch once decode finishes.)
-- `python -m build` produces a clean sdist; `pytest` is green (80 tests,
-  local Python 3.14). CI runs the same suite on 3.10–3.12 (below).
+  Hebrew translate. Two timing differences: per-segment callbacks fire live
+  during decode in-process but replay in one batch after decode on the worker
+  path, and a mid-file cancellation takes effect immediately in-process but only
+  between requests on the worker path.
+- `python -m build` produces a clean sdist and wheel (both carry the web UI);
+  `pytest` is green (81 tests, local Python 3.14). CI runs the same suite on
+  3.10–3.12 (below).
 - `visper-server` binds `127.0.0.1` by default — the GPU is never exposed to the
   LAN or a browser on another origin without an explicit `--host` flag.
 
@@ -83,7 +85,7 @@ TranscriptResult { text, segments, audio_duration, rtf, tier_used, backend, he_t
  │
  ├── visper/_cli.py        →  visper-file  /  visper-live
  ├── visper/server.py      →  FastAPI: POST /transcribe, /transcribe/stream (SSE),
- │                             WS /ws/live  — serves web/index.html at /
+ │                             WS /ws/live  — serves visper/web/index.html at /
  └── visper/api.py         →  transcribe() / stream_transcribe() / transcribe_chunked()
 ```
 
@@ -125,10 +127,10 @@ TranscriptResult { text, segments, audio_duration, rtf, tier_used, backend, he_t
 | Hebrew ASR | `ivrit-ai/whisper-large-v3-turbo-ct2` | Purpose-built Hebrew fine-tune (the community-standard open model for Hebrew ASR); measured WER in §5. Cost: transcription-only (no usable translate task), ~1.5 GB, no MLX build — Apple Silicon falls back to base `large-v3-turbo`. |
 | Inference runtime | CTranslate2 (`faster-whisper`) | int8 quantised, deterministic decode, low memory footprint. Cost: a second quantised model format, and CT2 wheels lag new CPython — hence the venv-worker. |
 | Multi-Python isolation | venv-worker subprocess | Host can run Python 3.14; the ASR venv runs 3.12 where `faster-whisper` has wheels. Communication is a JSON-line protocol over stdin/stdout. Cost: a process hop and a serialise per call; feature parity had to be re-implemented on the worker path. |
-| he→en translation | `Helsinki-NLP/opus-mt-tc-big-he-en` → CTranslate2 int8 | Dedicated MT beats asking the ASR fine-tune to translate. Reuses the CT2 runtime already loaded (no torch/transformers at runtime; `sentencepiece` is the only added dependency). Cost: a ~220 MB model fetched from a GitHub release asset on first Hebrew→English use (SHA-256 pinned). |
+| he→en translation | `Helsinki-NLP/opus-mt-tc-big-he-en` → CTranslate2 int8 | Dedicated MT beats asking the ASR fine-tune to translate. Reuses the CT2 runtime already loaded (no torch/transformers at runtime; `sentencepiece` is the only added dependency). Cost: a ~210 MB model fetched from a GitHub release asset on first Hebrew→English use (SHA-256 pinned); `install.py` pre-fetches it. |
 | Accelerators | CUDA · Intel OpenVINO · Apple MLX · CPU | Cover every consumer machine. The benchmark picks per-bucket; a runtime fallback chain (`CUDA → OpenVINO HETERO → iGPU → CPU → CT2 CPU`) recovers from a device that fails at load. Cost: four code paths behind one `Transcriber`. |
-| API server | FastAPI + `sse-starlette` | Non-blocking SSE/WebSocket streaming with minimal boilerplate; accepts the async-debugging overhead over Flask. Binds `127.0.0.1` by default (`--host 0.0.0.0` opt-in) so the GPU is never LAN-exposed accidentally. |
-| Web UI | Single `web/index.html`, vendored `lucide` | Zero build step, opens from the server. Icons vendored (not a CDN) to keep the "no cloud dependency" claim literally true. |
+| API server | FastAPI (`StreamingResponse` for SSE) | Non-blocking SSE/WebSocket streaming with minimal boilerplate; accepts the async-debugging overhead over Flask. Binds `127.0.0.1` by default (`--host 0.0.0.0` opt-in) so the GPU is never LAN-exposed accidentally. |
+| Web UI | Single `visper/web/index.html`, vendored `lucide` | Zero build step, served by the API at `/`. Shipped inside the package so a `pip install` serves it too. Icons vendored (not a CDN) to keep the "no cloud dependency" claim literally true. |
 | Config | One YAML + one loader (`visper/_config.py`) | A single cached parser; `config.yaml` is packaged so a non-editable install behaves identically. Replaced 8 ad-hoc parsers that had drifted. |
 | Accuracy eval | `jiwer`, local `visper-eval` | WER/CER on real corpora on the user's machine — no cloud eval, no Colab. Both sides run through the shipped normaliser, then a symmetric punctuation strip for scoring. |
 | Tests / CI | `pytest`, GitHub Actions | Unit suite on pure logic (params, buckets, config, postprocess, eval scoring, translation wrapper) — no model download in CI. |
@@ -163,15 +165,20 @@ JSON round-trip per call, negligible against decode time.
   30 s timeout, checked against a pinned SHA-256, and extracted with a
   path-traversal + symlink guard (`tarfile` `data` filter on 3.12+).
 - **`/health` reports capability, not just liveness** — it advertises which
-  languages can translate, and stops advertising Hebrew translation the moment
-  the MT path is known broken, so the UI hides a toggle that would silently
-  underperform.
+  languages can translate, stops advertising Hebrew translation the moment the
+  MT path is known broken, and flags (`he_en_pending_download`) when he→en works
+  but its model hasn't been fetched yet, so the UI never silently under-delivers.
 - **venv creation survives Windows AV locks** (`venv_manager.py`) — Defender
   briefly locks a freshly-copied `python.exe`; venv creation retries with
   backoff and polls for real deletion before recreating. (`docs/lessons.md`.)
 - **Streaming back-pressure** (`streamer.py`) — a bounded `queue.Queue(maxsize=4)`
   between the mic producer and the decode consumer; drop-oldest + warn after 3
   consecutive drops rather than unbounded latency growth.
+
+**Known limitation:** the venv-worker subprocess is spawned once and not
+respawned — if it dies mid-session, subsequent requests fail until
+`visper-server` is restarted. The in-process fallback runtime has no such
+single point of failure.
 
 ---
 
@@ -253,13 +260,13 @@ accurate 4.5}`:
 ```
 install.py               one-time setup: deps, model download, first benchmark
 config.yaml              → packaged copy at visper/config.yaml
-web/index.html           single-file web UI (served at / by visper-server)
 benchmark_results.json   the only hardware-config source of truth
 
 visper/
   api.py                 stable public surface: transcribe / stream / chunked
   _cli.py                argparse entry points for the console scripts
   server.py              FastAPI: /transcribe, /transcribe/stream, /ws/live, /
+  web/index.html         single-file web UI (packaged; served at / by the server)
   model_router.py        single-slot language→model cache
   transcriber.py         the only importer of faster_whisper / openvino_genai;
                          fallback chain, pre-proc, retry, two-stage he→en guard
@@ -277,8 +284,10 @@ visper/
 tests/unit/              pytest — pure logic, no model download
 docs/
   design/                per-feature "why" notes
+  benchmarks/            committed eval + benchmark runs behind §5/§6
   ship-readiness-audit.md  the defect inventory this rewrite worked from
   review-he-en-translation.md  adversarial review + security review of stage 2
+  review-ship-readiness-final.md  the pre-merge adversarial review
   lessons.md             non-obvious bugs and their root causes
 ```
 
