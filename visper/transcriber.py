@@ -521,16 +521,17 @@ class Transcriber:
                 return ""
             return normalize_text(mt.translate([he_txt])[0], "en")
 
-        preview_en: list = []
+        preview: list = []   # (source Hebrew, English or None) per streamed segment
 
         def _preview_cb(seg: dict) -> None:
+            he_txt = seg.get("text", "")
             try:
-                en = _one(seg.get("text", ""))
+                en = _one(he_txt)
             except Exception:
                 en = None       # sentinel: this segment must be retranslated below
-            preview_en.append(en)
+            preview.append((he_txt, en))
             if on_segment is not None:
-                on_segment({**seg, "he_text": seg.get("text", ""), "text": en or ""})
+                on_segment({**seg, "he_text": he_txt, "text": en or ""})
 
         _cb: Optional[Callable[[dict], None]] = _preview_cb if on_segment is not None else None
         he = self.transcribe(
@@ -544,9 +545,12 @@ class Transcriber:
             return he
 
         try:
-            if (segments and len(preview_en) == len(segments)
-                    and None not in preview_en):
-                en_texts = preview_en            # no retry — reuse the preview work
+            if (segments and len(preview) == len(segments)
+                    and all(en is not None and he_txt == s.get("text", "")
+                            for (he_txt, en), s in zip(preview, segments))):
+                # No retry — every streamed preview still matches its final
+                # segment, so reuse the work instead of translating twice.
+                en_texts = [en for _, en in preview]
             elif segments:
                 en_texts = [normalize_text(t, "en") for t in
                             mt.translate([s.get("text", "") for s in segments])]

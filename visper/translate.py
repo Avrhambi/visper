@@ -34,7 +34,10 @@ _MODEL_DIR = Path.home() / ".visper" / "models" / _MODEL_NAME
 # Release asset — built with:
 #   ct2-transformers-converter --model Helsinki-NLP/opus-mt-tc-big-he-en \
 #       --quantization int8
-#   (+ source.spm / target.spm / vocab.json copied in from the HF repo)
+#   The converter emits model.bin / config.json / shared_vocabulary.json;
+#   source.spm and target.spm are copied in from the HF repo. The five names
+#   in _MODEL_FILES below must match the archive exactly (verified 2026-09-07:
+#   sha256 fd378bc… contains all five).
 _ASSET_URL = (
     "https://github.com/Avrhambi/visper/releases/download/"
     "mt-he-en-v1/opus-mt-tc-big-he-en-ct2.tar.gz"

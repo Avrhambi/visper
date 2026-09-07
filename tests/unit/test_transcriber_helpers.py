@@ -152,6 +152,35 @@ class TestTranslateHebrew:
         res = self._run(he_result=empty)
         assert res.text == "" and res.segments == [] and res.he_text == ""
 
+    def test_retry_changed_segments_are_retranslated_not_reused(self):
+        # Preview streams the pre-retry Hebrew; a confidence-retry then replaces
+        # he.segments. Counts happen to match, but the text differs — the reuse
+        # guard must fall through to a batch re-translate of the final segments.
+        final = TranscriptResult(
+            text="שלום עולם מה שלומך",
+            segments=[
+                {"start": 0.0, "end": 1.0, "text": " שלום עולם", "confidence": -0.1},
+                {"start": 1.0, "end": 2.0, "text": " מה שלומך", "confidence": -0.1},
+            ],
+            audio_duration=2.0, elapsed=1.0, rtf=0.5, config_label="c",
+            backend="venv-worker/cpu", tier_used="accurate", whisper_params={},
+        )
+        pre_retry = [
+            {"start": 0.0, "end": 1.0, "text": " גיבריש אחד", "confidence": -2.0},
+            {"start": 1.0, "end": 2.0, "text": " גיבריש שתיים", "confidence": -2.0},
+        ]
+        tr = Transcriber.__new__(Transcriber)
+
+        def fake_transcribe(source, *, on_segment=None, **k):  # noqa: ARG001
+            if on_segment is not None:
+                for s in pre_retry:            # preview sees the discarded decode
+                    on_segment(dict(s))
+            return final                        # result carries the retry decode
+
+        tr.transcribe = fake_transcribe          # type: ignore[method-assign]
+        res = tr._translate_hebrew("a.wav", "medium", _FakeMT(), on_segment=lambda s: None)
+        assert [s["text"] for s in res.segments] == ["hello world", "how are you"]
+
     def test_mt_failure_returns_the_hebrew_transcript(self):
         class BoomMT:
             def translate(self, texts):
