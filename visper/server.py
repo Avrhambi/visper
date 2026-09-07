@@ -36,7 +36,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-_WEB_DIR = pathlib.Path(__file__).parent.parent / "web"
+_WEB_DIR = pathlib.Path(__file__).parent / "web"
 # Upload ceiling — refuse a file larger than this before writing it all to disk.
 _MAX_UPLOAD_BYTES = int(os.environ.get("VISPER_MAX_UPLOAD_MB", "200")) * 1024 * 1024
 

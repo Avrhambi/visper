@@ -100,10 +100,11 @@ visper-live
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 visper-server
-  Starts the REST/WebSocket API on http://localhost:8000.
-  Open web/index.html in your browser to use the web UI.
+  Starts the REST/WebSocket API on http://localhost:8000 and serves the
+  web UI at that address — open http://localhost:8000/ in your browser.
 
-  --host HOST      Bind address (default: 0.0.0.0)
+  --host HOST      Bind address (default: 127.0.0.1; pass 0.0.0.0 to expose
+                   on the LAN)
   --port PORT      Port (default: 8000)
   --reload         Auto-reload on code changes (development mode)
 

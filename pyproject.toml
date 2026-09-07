@@ -53,7 +53,7 @@ where = ["."]
 include = ["visper"]
 
 [tool.setuptools.package-data]
-visper = ["config.yaml"]
+visper = ["config.yaml", "web/index.html", "web/vendor/*"]
 
 [tool.setuptools.dynamic]
 version = { attr = "visper.__version__" }
