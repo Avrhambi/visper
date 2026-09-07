@@ -93,6 +93,30 @@ longer means re-transcribing.
 
 ---
 
+## 2026-09-07 — the shipped package couldn't serve its own web UI
+
+**What broke:** `pip install visper` (non-editable) + `visper-server` → the API
+worked but `GET /` was a 404 and `/vendor` never mounted. CI was green
+throughout.
+
+**Root cause:** `web/` sat at the repo root, outside the `visper` package.
+`_WEB_DIR` was `Path(__file__).parent.parent / "web"` — correct for an editable
+checkout, but on a real install it resolved to `site-packages/web`, which
+doesn't exist. `package-data` only listed `config.yaml`. CI only ever ran
+`pip install -e` (editable), where `../web` happens to be the repo, so it never
+exercised the shipped layout.
+
+**Fix (`cefb463`):** `git mv web visper/web`; `_WEB_DIR` is package-relative;
+`package-data` ships `web/index.html` + `web/vendor/*`. Verified present in both
+the wheel and the sdist (`zipfile` / `tarfile` listing).
+
+**Gotcha:** an editable install is not a smoke test of the package. Anything
+addressed relative to `__file__.parent.parent` (data files, templates, vendored
+assets) is invisible to that check. Build the wheel and inspect it, or
+`pip install` the sdist into a throwaway venv.
+
+---
+
 ## 2026-09-07 — `/transcribe` returned an empty segment list on the default runtime
 
 **What broke:** on the venv-worker runtime (the default once a benchmark stamps
