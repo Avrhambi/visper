@@ -241,6 +241,11 @@ async def transcribe_stream(request: Request, file: UploadFile = File(...), lang
                 q.put({"error": str(e)})
         finally:
             q.put(_sentinel)
+            # Sole owner of the temp file: this thread is the only reader and
+            # always runs to completion (abort_event makes transcribe_chunked
+            # bail at the next segment). _generate() can't clean up reliably —
+            # the client may drop the connection before iterating the response.
+            tmp_path.unlink(missing_ok=True)
 
     threading.Thread(target=_run, daemon=True).start()
 
@@ -269,9 +274,8 @@ async def transcribe_stream(request: Request, file: UploadFile = File(...), lang
             abort_event.set()
             raise
         finally:
-            abort_event.set()
+            abort_event.set()   # tells _run to stop; _run unlinks the temp file
             watcher.cancel()
-            tmp_path.unlink(missing_ok=True)
 
     return StreamingResponse(_generate(), media_type="text/event-stream")
 
