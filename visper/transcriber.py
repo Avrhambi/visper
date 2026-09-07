@@ -390,6 +390,8 @@ class Transcriber:
                         kwargs2["task"] = "translate"
                     if initial_prompt:
                         kwargs2["initial_prompt"] = initial_prompt
+                    if self._hotwords:
+                        kwargs2["hotwords"] = self._hotwords
                     kwargs2["vad_filter"] = vad_filter
                     kwargs2["vad_parameters"] = dict(
                         min_silence_duration_ms=vad_min_silence_ms,
