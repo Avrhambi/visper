@@ -19,9 +19,10 @@ repo to a new machine is a re-benchmark, never a code change.
 ## 1. Problem
 
 Off-the-shelf speech-to-text forces a choice: send audio to a cloud API
-(privacy, cost, offline-hostile) or run Whisper locally and hand-tune a dozen
-knobs per machine. Hebrew makes it worse — `whisper-large-v3` is mediocre on
-Hebrew, the good model (`ivrit-ai`'s fine-tune) is transcription-only and
+(privacy, cost, offline-hostile) or run [OpenAI Whisper][whisper] locally and
+hand-tune a dozen knobs per machine. Hebrew makes it worse — stock
+`whisper-large-v3` is middling on Hebrew, the good model
+([ivrit.ai][ivrit]'s [fine-tune][ivrit-model]) is transcription-only and
 translates poorly, and Hebrew RTL text needs script-boundary normalisation that
 general tooling doesn't do.
 
@@ -105,11 +106,11 @@ TranscriptResult { text, segments, audio_duration, rtf, tier_used, backend, he_t
    segment is also translated as it decodes, for a live English preview; the
    default venv-worker runtime replays the Hebrew segments in one batch after
    decode.)
-5. The Hebrew decode runs in the **venv-worker subprocess** (a Python 3.12 venv
-   with the `faster-whisper` wheel the host Python can't install). Params —
-   beam size, temperature ladder, VAD settings — come from
-   `params.get_params_for_tier`. Low mean-logprob triggers one retry at the next
-   tier.
+5. The Hebrew decode runs in the **venv-worker subprocess** (the per-device venv
+   the benchmark built — e.g. `.venvs/cuda` with the CUDA CTranslate2 build and
+   NVIDIA libraries). Params — beam size, temperature ladder, VAD settings —
+   come from `params.get_params_for_tier`. Low mean-logprob triggers one retry
+   at the next tier.
 6. **`translate.py`** SentencePiece-encodes each Hebrew segment, runs one
    `ctranslate2` `translate_batch`, decodes English. Model absent/broken →
    silently falls back to Whisper's own translate task.
@@ -124,24 +125,28 @@ TranscriptResult { text, segments, audio_duration, rtf, tier_used, backend, he_t
 
 | Layer | Technology | Rationale & trade-offs |
 |---|---|---|
-| Hebrew ASR | `ivrit-ai/whisper-large-v3-turbo-ct2` | Purpose-built Hebrew fine-tune (the community-standard open model for Hebrew ASR); measured WER in §5. Cost: transcription-only (no usable translate task), ~1.5 GB, no MLX build — Apple Silicon falls back to base `large-v3-turbo`. |
-| Inference runtime | CTranslate2 (`faster-whisper`) | int8 quantised, deterministic decode, low memory footprint. Cost: a second quantised model format, and CT2 wheels lag new CPython — hence the venv-worker. |
-| Multi-Python isolation | venv-worker subprocess | Host can run Python 3.14; the ASR venv runs 3.12 where `faster-whisper` has wheels. Communication is a JSON-line protocol over stdin/stdout. Cost: a process hop and a serialise per call; feature parity had to be re-implemented on the worker path. |
-| he→en translation | `Helsinki-NLP/opus-mt-tc-big-he-en` → CTranslate2 int8 | Dedicated MT beats asking the ASR fine-tune to translate. Reuses the CT2 runtime already loaded (no torch/transformers at runtime; `sentencepiece` is the only added dependency). Cost: a ~210 MB model fetched from a GitHub release asset on first Hebrew→English use (SHA-256 pinned); `install.py` pre-fetches it. |
-| Accelerators | CUDA · Intel OpenVINO · Apple MLX · CPU | Cover every consumer machine. The benchmark picks per-bucket; a runtime fallback chain (`CUDA → OpenVINO HETERO → iGPU → CPU → CT2 CPU`) recovers from a device that fails at load. Cost: four code paths behind one `Transcriber`. |
-| API server | FastAPI (`StreamingResponse` for SSE) | Non-blocking SSE/WebSocket streaming with minimal boilerplate; accepts the async-debugging overhead over Flask. Binds `127.0.0.1` by default (`--host 0.0.0.0` opt-in) so the GPU is never LAN-exposed accidentally. |
-| Web UI | Single `visper/web/index.html`, vendored `lucide` | Zero build step, served by the API at `/`. Shipped inside the package so a `pip install` serves it too. Icons vendored (not a CDN) to keep the "no cloud dependency" claim literally true. |
-| Config | One YAML + one loader (`visper/_config.py`) | A single cached parser; `config.yaml` is packaged so a non-editable install behaves identically. Replaced 8 ad-hoc parsers that had drifted. |
-| Accuracy eval | `jiwer`, local `visper-eval` | WER/CER on real corpora on the user's machine — no cloud eval, no Colab. Both sides run through the shipped normaliser, then a symmetric punctuation strip for scoring. |
+| Hebrew ASR | [`ivrit-ai/whisper-large-v3-turbo-ct2`][ivrit-model] | Purpose-built Hebrew fine-tune of [OpenAI Whisper][whisper] `large-v3-turbo` by [ivrit.ai][ivrit] — the community-standard open model for Hebrew ASR; measured WER in §5. Cost: transcription-only (no usable translate task), ~1.5 GB, no MLX build — Apple Silicon falls back to base [`large-v3-turbo`](https://huggingface.co/openai/whisper-large-v3-turbo). |
+| Inference runtime | [CTranslate2](https://github.com/OpenNMT/CTranslate2) (via [`faster-whisper`](https://github.com/SYSTRAN/faster-whisper)) | int8 quantised, deterministic decode, low memory footprint. Cost: a second quantised model format, and its device-specific native builds motivate the per-device venv below. |
+| Per-device isolation | venv-worker subprocess (`.venvs/<device>`) | Each accelerator has a heavy, conflicting native stack (CUDA + cuBLAS/cuDNN, or OpenVINO + optimum-intel + onnxruntime). The benchmark builds one venv per device and the decode runs there — the host env stays clean, and OpenVINO's hard Python 3.12 requirement doesn't pin the whole project. Communication is a JSON-line protocol over stdin/stdout. Cost: a process hop and a serialise per call; feature parity had to be re-implemented on the worker path. |
+| he→en translation | [`Helsinki-NLP/opus-mt-tc-big-he-en`](https://huggingface.co/Helsinki-NLP/opus-mt-tc-big-he-en) ([OPUS-MT](https://github.com/Helsinki-NLP/Opus-MT)) → CTranslate2 int8 | Dedicated MT beats asking the ASR fine-tune to translate. Reuses the CT2 runtime already loaded (no torch/transformers at runtime; `sentencepiece` is the only added dependency). Cost: a ~210 MB model fetched from a GitHub release asset on first Hebrew→English use (SHA-256 pinned); `install.py` pre-fetches it. |
+| Accelerators | CUDA · [Intel OpenVINO](https://github.com/openvinotoolkit/openvino) · [Apple MLX](https://github.com/ml-explore/mlx-examples/tree/main/whisper) · CPU | Cover every consumer machine. The benchmark picks per-bucket; a runtime fallback chain (`CUDA → OpenVINO HETERO → iGPU → CPU → CT2 CPU`) recovers from a device that fails at load. Cost: four code paths behind one `Transcriber`. |
+| API server | [FastAPI](https://fastapi.tiangolo.com) (`StreamingResponse` for SSE) | Non-blocking SSE/WebSocket streaming with minimal boilerplate; accepts the async-debugging overhead over Flask. Binds `127.0.0.1` by default (`--host 0.0.0.0` opt-in) so the GPU is never LAN-exposed accidentally. |
+| Web UI | Single `visper/web/index.html`, vendored [`lucide`](https://lucide.dev) | Zero build step, served by the API at `/`. Shipped inside the package so a `pip install` serves it too. Icons vendored (not a CDN) to keep the "no cloud dependency" claim literally true. |
+| Config | One YAML + one loader (`visper/_config.py`) | A single cached parser; `config.yaml` ships inside the package (`visper/config.yaml`) so a non-editable install behaves identically. Replaced 8 ad-hoc parsers that had drifted. |
+| Accuracy eval | [`jiwer`](https://github.com/jitsi/jiwer), local `visper-eval` | WER/CER on real corpora on the user's machine — no cloud eval, no Colab. Both sides run through the shipped normaliser, then a symmetric punctuation strip for scoring. |
 | Tests / CI | `pytest`, GitHub Actions | Unit suite on pure logic (params, buckets, config, postprocess, eval scoring, translation wrapper) — no model download in CI. |
 
-### Why a subprocess worker instead of just pinning one Python
+### Why a subprocess worker instead of one fat environment
 
-`faster-whisper`'s CTranslate2 wheels trail new CPython by 6–12 months. Pinning
-the whole project to 3.12 would age it out fast; making the host 3.14 and
-isolating only the ASR runtime in a 3.12 venv keeps the rest of the code
-current. The worker is spawned once and kept warm; the cost is one `np.save` +
-JSON round-trip per call, negligible against decode time.
+The accelerator backends don't co-exist cleanly in one venv: the CUDA build of
+CTranslate2 drags in NVIDIA's cuBLAS/cuDNN wheels, OpenVINO pulls
+`optimum-intel` + `onnxruntime` and only supports Python ≤ 3.12, and the
+native-wheel stack in general trails new CPython by a release or two. Rather
+than pin the whole project to the lowest common denominator, the benchmark
+builds a dedicated venv per device (`.venvs/cuda`, `.venvs/openvino`, …) and the
+decode runs in whichever one won. The host stays on current Python with a clean
+dependency set. The worker is spawned once and kept warm; the cost is one
+`np.save` + JSON round-trip per call, negligible against decode time.
 
 ---
 
@@ -258,11 +263,11 @@ accurate 4.5}`:
 ## 7. Project Layout
 
 ```
-install.py               one-time setup: deps, model download, first benchmark
-config.yaml              → packaged copy at visper/config.yaml
-benchmark_results.json   the only hardware-config source of truth
+install.py               one-time setup: deps, models, first benchmark
+benchmark_results.json   the only hardware-config source of truth (git-ignored)
 
 visper/
+  config.yaml            the one config file (packaged with the wheel)
   api.py                 stable public surface: transcribe / stream / chunked
   _cli.py                argparse entry points for the console scripts
   server.py              FastAPI: /transcribe, /transcribe/stream, /ws/live, /
@@ -297,7 +302,7 @@ docs/
 
 ```bash
 git clone https://github.com/Avrhambi/visper && cd visper
-python install.py          # deps + model (~1.5 GB) + first hardware benchmark
+python install.py          # deps + ASR model (~1.5 GB) + he→en model (~210 MB) + first benchmark
 ```
 
 Requires Python 3.10+ and [ffmpeg](https://ffmpeg.org) on PATH (WAV works
@@ -348,6 +353,36 @@ no MLX build) — strong, but not Hebrew-specialised.
 
 ---
 
+## Acknowledgements
+
+Visper is a thin engineering layer over other people's models and runtimes:
+
+- **[ivrit.ai](https://www.ivrit.ai)** — the Hebrew ASR fine-tune
+  ([`ivrit-ai/whisper-large-v3-turbo-ct2`](https://huggingface.co/ivrit-ai/whisper-large-v3-turbo-ct2))
+  that makes Hebrew transcription usable. Visper is a consumer of their work, not
+  affiliated with the project.
+- **[OpenAI Whisper](https://github.com/openai/whisper)**
+  ([paper](https://arxiv.org/abs/2212.04356)) — the base model architecture; the
+  non-Hebrew languages use [`whisper-large-v3`](https://huggingface.co/openai/whisper-large-v3)
+  and [`distil-whisper`](https://huggingface.co/distil-whisper/distil-large-v3-ct2).
+- **[OPUS-MT / Helsinki-NLP](https://github.com/Helsinki-NLP/Opus-MT)** —
+  [`opus-mt-tc-big-he-en`](https://huggingface.co/Helsinki-NLP/opus-mt-tc-big-he-en),
+  the dedicated Hebrew→English translation model.
+- **[SYSTRAN faster-whisper](https://github.com/SYSTRAN/faster-whisper)** &
+  **[CTranslate2](https://github.com/OpenNMT/CTranslate2)** — the quantised
+  inference runtime.
+- **[OpenVINO](https://github.com/openvinotoolkit/openvino)**,
+  **[Apple MLX](https://github.com/ml-explore/mlx-examples/tree/main/whisper)**,
+  **[jiwer](https://github.com/jitsi/jiwer)**,
+  **[FastAPI](https://fastapi.tiangolo.com)**,
+  **[lucide](https://lucide.dev)**.
+
+---
+
 ## Contributing
 
 Component boundaries and design decisions: [ARCHITECTURE.md](ARCHITECTURE.md).
+
+[whisper]: https://github.com/openai/whisper
+[ivrit]: https://www.ivrit.ai
+[ivrit-model]: https://huggingface.co/ivrit-ai/whisper-large-v3-turbo-ct2
