@@ -1,0 +1,99 @@
+{
+ "timestamp": "2026-09-06T18:33:28",
+ "model_id": "ivrit-ai/whisper-large-v3-turbo-ct2",
+ "hardware": {
+  "cpu": "11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz",
+  "logical_cores": 8,
+  "avx2": true,
+  "avx512": true,
+  "cuda_available": true,
+  "gpu_name": "NVIDIA GeForce MX350",
+  "gpu_vram_mb": 2048,
+  "openvino_available": true,
+  "openvino_devices": [
+   "CPU",
+   "GPU.0",
+   "GPU.1"
+  ],
+  "openvino_device_names": {
+   "CPU": "11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz",
+   "GPU.0": "Intel(R) Iris(R) Xe Graphics (iGPU)",
+   "GPU.1": "NVIDIA GeForce MX350 (dGPU)"
+  },
+  "mlx_available": false
+ },
+ "best": {
+  "short": {
+   "device": "cuda",
+   "compute_type": "int8_float32",
+   "cpu_threads": 4,
+   "num_workers": 1,
+   "omp_threads": 4,
+   "rtf": 0.558,
+   "status": "ok",
+   "auto_accuracy_tier": "fast"
+  },
+  "medium": {
+   "device": "cuda",
+   "compute_type": "int8_float32",
+   "cpu_threads": 4,
+   "num_workers": 1,
+   "omp_threads": 4,
+   "rtf": 0.1883,
+   "status": "ok",
+   "auto_accuracy_tier": "accurate"
+  },
+  "long": {
+   "device": "cuda",
+   "compute_type": "int8_float32",
+   "cpu_threads": 4,
+   "num_workers": 1,
+   "omp_threads": 4,
+   "rtf": 0.1712,
+   "status": "ok",
+   "auto_accuracy_tier": "accurate"
+  },
+  "extended": {
+   "device": "cuda",
+   "compute_type": "int8_float32",
+   "cpu_threads": 4,
+   "num_workers": 1,
+   "omp_threads": 4,
+   "rtf": 0.1581,
+   "status": "ok",
+   "auto_accuracy_tier": "accurate"
+  },
+  "streaming": {
+   "device": "cuda",
+   "compute_type": "int8_float32",
+   "cpu_threads": 4,
+   "num_workers": 1,
+   "omp_threads": 4,
+   "rtf": 0.7923,
+   "status": "ok",
+   "median_rtf": 0.7923,
+   "rtf_stdev": 0.0972,
+   "p95_ms": null,
+   "auto_accuracy_tier": "fast"
+  }
+ },
+ "fallback_order": [
+  {
+   "device": "openvino",
+   "openvino_device": "CPU",
+   "compute_type": "int8",
+   "cpu_threads": 4,
+   "num_workers": 1,
+   "omp_threads": 4,
+   "is_igpu": false
+  },
+  {
+   "device": "cpu",
+   "compute_type": "int8",
+   "cpu_threads": 2,
+   "num_workers": 1,
+   "omp_threads": 2
+  }
+ ],
+ "mode": "fast"
+}

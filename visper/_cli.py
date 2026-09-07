@@ -1,22 +1,48 @@
 """Entry point wrappers for visper-* CLI commands."""
 
 
+def _utf8_console() -> None:
+    """Force UTF-8 on stdout/stderr.
+
+    Windows consoles default to a locale codepage (cp1252, or cp1255 on a
+    Hebrew install — this project's core audience). Our output carries arrows,
+    box-drawing and em-dashes, and the RTF report table is Markdown. Without
+    this, a plain ``visper-benchmark`` run dies with UnicodeEncodeError.
+    """
+    import sys
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+        except (AttributeError, ValueError):
+            pass
+
+
 def file():
+    _utf8_console()
     from visper.transcribe_file import main
     main()
 
 
 def live():
+    _utf8_console()
     from visper.transcribe_live import main
     main()
 
 
 def benchmark():
+    _utf8_console()
     from visper.run_benchmark import main
     main()
 
 
+def eval_():
+    _utf8_console()
+    from visper.eval import main
+    main()
+
+
 def help():
+    _utf8_console()
     print("""
 Local Speech-to-Text — command reference
 ─────────────────────────────────────────
@@ -74,10 +100,11 @@ visper-live
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 visper-server
-  Starts the REST/WebSocket API on http://localhost:8000.
-  Open web/index.html in your browser to use the web UI.
+  Starts the REST/WebSocket API on http://localhost:8000 and serves the
+  web UI at that address — open http://localhost:8000/ in your browser.
 
-  --host HOST      Bind address (default: 0.0.0.0)
+  --host HOST      Bind address (default: 127.0.0.1; pass 0.0.0.0 to expose
+                   on the LAN)
   --port PORT      Port (default: 8000)
   --reload         Auto-reload on code changes (development mode)
 

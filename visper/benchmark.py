@@ -52,7 +52,30 @@ from typing import Optional
 import numpy as np
 
 ROOT = Path(__file__).parent.parent
-RESULTS_PATH = ROOT / "benchmark_results.json"
+
+
+def _results_path() -> Path:
+    """benchmark_results.json location.
+
+    Prefer the repo root (editable install — keeps the file with the project).
+    Fall back to ~/.visper/ when that directory isn't writable, e.g. a
+    non-editable 'pip install' into a read-only site-packages.
+    """
+    repo = ROOT / "benchmark_results.json"
+    if repo.exists():
+        return repo
+    try:
+        probe = ROOT / ".visper-write-test"
+        probe.touch()
+        probe.unlink()
+        return repo
+    except OSError:
+        home = Path.home() / ".visper"
+        home.mkdir(parents=True, exist_ok=True)
+        return home / "benchmark_results.json"
+
+
+RESULTS_PATH = _results_path()
 RECORDS_DIR  = ROOT / "records"
 MODEL_ID     = "ivrit-ai/whisper-large-v3-turbo-ct2"
 MLX_MODEL_ID = "mlx-community/whisper-large-v3-turbo"  # benchmark uses Hebrew base turbo
@@ -419,10 +442,12 @@ def _build_fallback_chain(hw_info: dict) -> tuple[dict, list[dict]]:
 
 
 def _auto_accuracy_tier(rtf: float) -> str:
-    if rtf * 4.5 < 0.85:
-        return "accurate"
-    if rtf * 1.8 < 0.85:
-        return "balanced"
+    # Mirror params.get_params() exactly — same budget, same multipliers, same
+    # tier order — so the reported tier matches the one selected at call time.
+    from visper.params import RTF_BUDGET, TIER_RTF_MULTIPLIERS
+    for tier in ("accurate", "balanced", "light"):
+        if rtf * TIER_RTF_MULTIPLIERS[tier] < RTF_BUDGET:
+            return tier
     return "fast"
 
 
@@ -498,8 +523,8 @@ def run_fast_benchmark(force: bool = False) -> None:
 
     # Stamp venv path so Transcriber can use the same venv
     from visper import venv_manager
-    vp = venv_manager.venv_path(working_primary["device"])
-    if vp.exists():
+    if venv_manager.venv_exists(working_primary["device"]):
+        vp = venv_manager.venv_path(working_primary["device"])
         for cfg in best.values():
             if cfg:
                 cfg["venv_path"] = str(vp)
@@ -581,9 +606,9 @@ def _estimate_config_heuristic(hw_info: dict) -> dict[str, Optional[dict]]:
     Used by quick mode and when skip_benchmark=true in config.yaml.
     All results carry status="estimated" so callers can distinguish from timed runs.
 
-    CUDA is only chosen when VRAM >= _CUDA_MIN_VRAM_MB (3 GB). Entry-level
-    cards like MX350 (2 GB) fail or hang loading large-v3-turbo — benchmark
-    evidence from i5-1135G7 / MX350 machine confirmed this.
+    CUDA is only chosen when VRAM >= _CUDA_MIN_VRAM_MB. On 2 GB cards (MX350)
+    int8_float32 loads and runs; bare int8 hangs — confirmed on the
+    i5-1135G7 / MX350 machine — so compute_type is picked accordingly below.
 
     For AVX2 CPUs, 2 threads outperforms physical core count because the
     model is memory-bandwidth bound; adding threads increases contention.
@@ -1044,14 +1069,8 @@ def _apply_igpu_preference(best: dict, results: dict, margin: float) -> dict:
 # ---------------------------------------------------------------------------
 
 def _load_config_yaml() -> dict:
-    try:
-        import yaml
-        path = ROOT / "config.yaml"
-        if path.exists():
-            return yaml.safe_load(path.read_text()) or {}
-    except Exception:
-        pass
-    return {}
+    from visper._config import load_config
+    return load_config()
 
 
 # ---------------------------------------------------------------------------
@@ -1248,9 +1267,8 @@ def run_benchmark(force: bool = False, quick: bool = False, full: bool = False) 
     for cfg in best.values():
         if cfg is None:
             continue
-        vp = venv_manager.venv_path(cfg["device"])
-        if vp.exists():
-            cfg["venv_path"] = str(vp)
+        if venv_manager.venv_exists(cfg["device"]):
+            cfg["venv_path"] = str(venv_manager.venv_path(cfg["device"]))
 
     output = {
         "timestamp": datetime.now().isoformat(timespec="seconds"),
@@ -1264,11 +1282,60 @@ def run_benchmark(force: bool = False, quick: bool = False, full: bool = False) 
     print(f"\n[Benchmark] Done. Results written to {RESULTS_PATH}")
 
 
+def format_report_table() -> str:
+    """Markdown table of the measured best config per bucket — the source of the
+    RTF numbers in the README. Reads benchmark_results.json; raises if absent."""
+    if not RESULTS_PATH.exists():
+        raise FileNotFoundError(
+            f"{RESULTS_PATH.name} not found — run `visper-benchmark` (or `--fast`) first."
+        )
+    data = json.loads(RESULTS_PATH.read_text())
+    hw = data.get("hardware", {})
+    best = data.get("best", {})
+    mode = data.get("mode", "?")
+
+    cpu = hw.get("cpu", "?")
+    gpu = hw.get("gpu_name")
+    ram = hw.get("ram_mb")
+    hw_line = f"{cpu}" + (f" / {gpu}" if gpu else "") + (f" / {ram // 1024} GB RAM" if ram else "")
+
+    lines = [
+        f"**Measured on:** {hw_line}  ",
+        f"**Benchmark mode:** {mode}  ·  **Model:** `{data.get('model_id', MODEL_ID)}`",
+        "",
+        "| Bucket | Device | Compute | Threads | RTF | Auto tier |",
+        "|---|---|---|--:|--:|---|",
+    ]
+    for bucket in BUCKET_ORDER + ["streaming"]:
+        cfg = best.get(bucket)
+        if not cfg:
+            lines.append(f"| {bucket} | — | — | — | — | — |")
+            continue
+        rtf = cfg.get("rtf")
+        rtf_s = f"{rtf:.3f}" if isinstance(rtf, (int, float)) else "—"
+        dev = cfg.get("device", "?")
+        if dev == "openvino":
+            dev = f"openvino/{cfg.get('openvino_device', '?')}"
+            compute = "—"
+        else:
+            compute = cfg.get("compute_type", "?")
+        threads = cfg.get("cpu_threads", "—")
+        # Recompute from the measured RTF rather than trusting the stored field —
+        # a results file written before a tier-policy change would otherwise
+        # report a tier the engine no longer selects (see params.get_params).
+        tier = _auto_accuracy_tier(rtf) if isinstance(rtf, (int, float)) else "?"
+        lines.append(f"| {bucket} | {dev} | {compute} | {threads} | {rtf_s} | {tier} |")
+
+    lines += ["", "_RTF = wall-clock / audio duration; lower is faster, 1.0 = real time._"]
+    return "\n".join(lines)
+
+
 def _load_igpu_margin() -> float:
+    # Fallback matches the shipped config.yaml value.
     try:
-        return float(_load_config_yaml().get("igpu_preference_margin", 0.0))
+        return float(_load_config_yaml().get("igpu_preference_margin", 0.05))
     except Exception:
-        return 0.0
+        return 0.05
 
 
 def force_rebenchmark() -> None:
@@ -1280,13 +1347,18 @@ def force_rebenchmark() -> None:
 # ---------------------------------------------------------------------------
 
 
-def get_best_config(bucket: str) -> dict:
+def get_best_config(bucket: str, auto_benchmark: bool = True) -> dict:
     """
     Returns the empirically best config for the given bucket.
 
     If skip_benchmark=true in config.yaml AND force_device + force_compute_type
     are both set, returns the manual config immediately without touching
-    benchmark_results.json.  Otherwise auto-triggers benchmark if missing/empty.
+    benchmark_results.json.  Otherwise auto-triggers the benchmark if
+    missing/empty — unless ``auto_benchmark=False``, in which case a heuristic
+    config is derived from hardware detection alone (no inference, no file
+    written).  Callers on a latency-sensitive path (``GET /health``, warmup,
+    a bare ``import visper``) pass ``auto_benchmark=False`` so they never block
+    for minutes on a first run.
 
     Falls back to nearest bucket if requested one has no result.
     Respects force_device / force_compute_type / force_cpu_threads from config.yaml.
@@ -1309,12 +1381,25 @@ def get_best_config(bucket: str) -> dict:
         }
         return cfg
 
-    if not RESULTS_PATH.exists():
-        run_benchmark()
-    else:
-        data = json.loads(RESULTS_PATH.read_text())
-        if all(v is None for v in data.get("best", {}).values()):
-            run_benchmark(force=True)
+    results_missing = not RESULTS_PATH.exists()
+    results_empty = False
+    if not results_missing:
+        try:
+            data = json.loads(RESULTS_PATH.read_text())
+            results_empty = all(v is None for v in data.get("best", {}).values())
+        except Exception:
+            results_empty = True
+
+    if results_missing or results_empty:
+        if not auto_benchmark:
+            # Latency-sensitive caller — never run inference here.
+            estimated = _estimate_config_heuristic(_collect_hardware_info())
+            est_cfg = estimated.get(bucket) or next((c for c in estimated.values() if c), None)
+            if est_cfg:
+                return _apply_config_overrides(est_cfg)
+            return {"device": "cpu", "compute_type": "int8", "cpu_threads": 4,
+                    "num_workers": 1, "omp_threads": 4, "status": "estimated"}
+        run_benchmark(force=results_empty)
 
     data = json.loads(RESULTS_PATH.read_text())
     best = data.get("best", {})

@@ -67,10 +67,8 @@ def main():
 
     if args.accuracy:
         try:
-            import yaml as _yaml
-            from pathlib import Path as _Path
-            _cfg_path = _Path(__file__).parent.parent / "config.yaml"
-            _cfg = _yaml.safe_load(_cfg_path.read_text()) if _cfg_path.exists() else {}
+            from visper._config import load_config
+            _cfg = dict(load_config())
             _cfg['accuracy_mode'] = args.accuracy
         except Exception:
             _cfg = {'accuracy_mode': args.accuracy}

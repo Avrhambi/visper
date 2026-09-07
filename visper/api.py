@@ -15,8 +15,13 @@ import numpy as np
 
 # Single router instance — holds at most one model in memory, swaps on language change.
 _router = None
+_router_hw: tuple = ()      # (device, compute_type) the live router was built with
 _router_lock = threading.Lock()
 _config_cache: dict = {}
+
+
+def _hw_key(cfg: dict) -> tuple:
+    return (cfg.get("device"), cfg.get("compute_type"), cfg.get("venv_path"))
 
 
 def _get_config(bucket: str) -> dict:
@@ -26,12 +31,44 @@ def _get_config(bucket: str) -> dict:
     return _config_cache[bucket]
 
 
-def _get_router(hw_config: dict):
-    global _router
+def reset_caches() -> None:
+    """Drop the cached per-bucket configs, the router, and the parsed config.yaml.
+
+    Call after re-running the benchmark or editing config.yaml inside a
+    long-lived process (e.g. the server) so the next transcription picks up
+    the new hardware config without a restart.
+    """
+    global _router, _router_hw
+    from visper._config import reload_config
     with _router_lock:
+        _config_cache.clear()
+        if _router is not None:
+            try:
+                _router.unload()
+            except Exception:
+                pass
+        _router = None
+        _router_hw = ()
+    reload_config()
+
+
+def _get_router(hw_config: dict):
+    """Return the shared ModelRouter, rebuilding it if the hardware config
+    changed (e.g. warmup used the heuristic config, then a benchmark ran and
+    the real one differs)."""
+    global _router, _router_hw
+    key = _hw_key(hw_config)
+    with _router_lock:
+        if _router is not None and _router_hw != key:
+            try:
+                _router.unload()
+            except Exception:
+                pass
+            _router = None
         if _router is None:
             from visper.model_router import ModelRouter
             _router = ModelRouter(hw_config)
+            _router_hw = key
     return _router
 
 
@@ -41,7 +78,7 @@ def transcribe_chunked(
     bucket: str = "auto",
     is_aborted: Optional[Callable[[], bool]] = None,
     language: str = "he",
-    initial_prompt: str = None,
+    initial_prompt: Optional[str] = None,
     task: str = "transcribe",
 ) -> str:
     """
@@ -99,7 +136,11 @@ def transcribe(
     config = _get_config(resolved_bucket)
     language = "he"  # transcribe() is Hebrew-only; use transcribe_chunked() for other languages
     engine = _get_router(config).get(language)
-    result = engine.transcribe(source, bucket=resolved_bucket, is_aborted=is_aborted)
+    # Pass language through so the decode token matches the routed model — else
+    # engine.transcribe falls back to self._language (config.yaml) and a
+    # `language: en` there would feed the Hebrew CT2 model an <|en|> token.
+    result = engine.transcribe(source, bucket=resolved_bucket, is_aborted=is_aborted,
+                               language=language)
     return result.text
 
 

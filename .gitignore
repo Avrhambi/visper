@@ -13,6 +13,12 @@ GEMINI.md
 # ── Auto-generated benchmark output ───────────────────────────────────────────
 benchmark_results.json
 
+# ── Local exploratory work (not part of the repo) ─────────────────────────────
+# raw Colab accuracy sweeps — superseded by visper-eval
+/speed_test*.ipynb
+# machine-specific dataset shortcut
+/datasets - Shortcut.lnk
+
 # ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
@@ -28,7 +34,8 @@ build/
 .venv/
 venv/
 env/
-.venvs/          # device-specific venvs managed by venv_manager.py
+# device-specific venvs managed by venv_manager.py
+.venvs/
 tests/.venv_ov_conv/
 
 # ── OS ────────────────────────────────────────────────────────────────────────
@@ -69,6 +76,8 @@ tests/speed_test_short.ipynb
 # ── Results / plans (local work, not for repo) ────────────────────────────────
 results/
 plan/
+eval_results.md
+*.md.json
 
 # ── Local work / personal config ──────────────────────────────────────────────
 .gitmessage

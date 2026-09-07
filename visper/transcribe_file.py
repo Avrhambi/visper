@@ -123,14 +123,8 @@ def _format_json(result) -> str:
 
 
 def _load_config() -> dict:
-    try:
-        import yaml
-        path = ROOT / "config.yaml"
-        if path.exists():
-            return yaml.safe_load(path.read_text()) or {}
-    except Exception:
-        pass
-    return {}
+    from visper._config import load_config
+    return load_config()
 
 
 def transcribe_one(path: Path, engine, args, cfg: dict) -> tuple[str, float]:

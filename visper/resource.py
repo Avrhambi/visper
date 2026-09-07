@@ -39,14 +39,8 @@ PROFILE_DEFAULTS = {
 
 
 def _load_user_config() -> dict:
-    try:
-        import yaml
-        path = ROOT / "config.yaml"
-        if path.exists():
-            return yaml.safe_load(path.read_text()) or {}
-    except Exception:
-        pass
-    return {}
+    from visper._config import load_config
+    return load_config()
 
 
 def _set_process_priority(level: str) -> None:

@@ -145,6 +145,13 @@ def _transcribe(model, audio, config: dict, params: dict):
                                               dict(min_silence_duration_ms=300,
                                                    speech_pad_ms=200)),
         }
+        # Pass-through keys the in-process path also forwards — without these the
+        # default (venv-worker) runtime silently ignores --prompt / the web
+        # prompt field / config.yaml hotwords / task=translate.
+        for _k in ("initial_prompt", "hotwords", "task", "prefix",
+                   "repetition_penalty", "length_penalty", "prompt_reset_on_temperature"):
+            if params.get(_k) not in (None, ""):
+                transcribe_kwargs[_k] = params[_k]
         segs, _ = model.transcribe(audio, **transcribe_kwargs)
         seg_list = list(segs)
         text = "".join(s.text for s in seg_list).strip()
