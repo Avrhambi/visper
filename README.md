@@ -186,7 +186,9 @@ strip for the score (the reference corpora carry no punctuation, so charging the
 model for a correctly-placed comma would be an artifact — see `docs/lessons.md`).
 Median is given alongside the mean because a few misaligned or truncated pairs
 skew the mean on the harder sets. Files scored are a random sample, transcribed
-end-to-end with internal VAD chunking.
+end-to-end with internal VAD chunking. The full run — every reference/hypothesis
+pair — is committed at
+[`docs/benchmarks/eval-he-balanced.json`](docs/benchmarks/eval-he-balanced.json).
 
 | Corpus | Files scored | Median clip | WER (mean) | WER (median) | CER | WER min / max | What it is |
 |---|--:|--:|--:|--:|--:|:--|---|
@@ -194,9 +196,9 @@ end-to-end with internal VAD chunking.
 | Longer-form | 25 / 792 | 26 s | 0.245 | 0.217 | 0.124 | 0.00 / 0.76 | Assorted Hebrew speech clips. Mean is dragged by two cases (one early-stopped decode, one foreign-word-contaminated reference); the median is the honest centre. |
 | CoSIH (spontaneous) | 15 / 15 | 4.8 min | 0.575 | 0.612 | 0.439 | 0.26 / 0.78 | Spontaneous-conversation *linguistics* corpus — fillers, overlap, phonetic transcription conventions. A limitations data point, not a benchmark; ASR on this genre is hard for any model. |
 
-Re-run: `visper-eval <corpus-dir> --tier balanced --out eval.md`. A run drops a
-JSON sidecar of every ref/hyp pair; `visper-eval --rescore eval.md.json`
-recomputes the table in seconds with no re-transcription.
+Reproduce the table in seconds (no audio needed):
+`visper-eval --rescore docs/benchmarks/eval-he-balanced.json`. Full re-run:
+`visper-eval <corpus-dir> --tier balanced --out eval.md`.
 
 ---
 
@@ -206,7 +208,8 @@ RTF (real-time factor) — wall-clock ÷ audio duration; **lower is faster**,
 `1.0` = real-time. Measured by `visper-benchmark`: one warm-up + one timed pass
 per `(backend × bucket)`, plus a 5-call streaming trial for model-loaded
 per-call latency. `visper-benchmark --report` prints this table from
-`benchmark_results.json`.
+`benchmark_results.json`; the reference machine's snapshot is committed at
+[`docs/benchmarks/benchmark-i5-1135g7-mx350.json`](docs/benchmarks/benchmark-i5-1135g7-mx350.json).
 
 **Measured on:** 11th Gen Intel Core i5-1135G7 @ 2.40 GHz · NVIDIA GeForce MX350
 (2 GB VRAM) · Intel Iris Xe iGPU · 8 logical cores · 16 GB RAM · no Apple MLX
