@@ -93,6 +93,37 @@ longer means re-transcribing.
 
 ---
 
+## 2026-09-07 — `/transcribe` returned an empty segment list on the default runtime
+
+**What broke:** on the venv-worker runtime (the default once a benchmark stamps
+a `venv_path`), `POST /transcribe` returned `"segments": []` and
+`/transcribe/stream` emitted only the final `final_text` event — no per-segment
+timestamps, no progress. The web UI builds its transcript view from `d.start` /
+`d.end`, so it silently lost all timing. The in-process path was unaffected, so
+this only showed up on real hardware, not in tests.
+
+**Root cause:** `Transcriber.transcribe()` forwards `on_segment` only to the
+in-process decode loop. `_transcribe_via_worker` never took the parameter — the
+worker returns every segment in one batch (its JSON-line protocol has no
+incremental message), and nobody replayed that batch to the caller. The server
+collects segments purely via the `on_segment` callback (`segments.append`), so
+on the worker path the callback never fired and the list stayed empty. The
+`TranscriptResult.segments` field *was* populated — but `transcribe_chunked`
+returns only `.text`, so the server never saw it.
+
+**Fix (`7a530b3`):** `_transcribe_via_worker` takes `on_segment` and replays the
+final (post-retry) segments through it, abort-aware; `transcribe()` forwards it.
+Fires once per segment, after decode — not live, but the consumer now sees the
+list.
+
+**Gotcha:** a callback-delivered value and a return-value-delivered value are
+different data paths. `TranscriptResult.segments` being correct told you nothing
+about whether the server's `on_segment` list was. When two runtimes are meant to
+be "identical", enumerate every output channel — return value, callback, side
+file — and check each one on both.
+
+---
+
 ## 2026-09-07 — the benchmark reported a coarser accuracy tier than runs
 
 **What broke:** the `visper-benchmark --report` table (which the README quotes)
