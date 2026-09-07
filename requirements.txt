@@ -19,5 +19,4 @@ scipy>=1.10             # audio_highpass: true
 # ── Server (optional — `pip install .[server]`) ──────────────────────────────
 fastapi>=0.100
 uvicorn[standard]>=0.23
-sse-starlette>=1.6
 python-multipart>=0.0.6

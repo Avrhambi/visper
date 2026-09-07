@@ -31,7 +31,6 @@ dependencies = [
 server = [
     "fastapi>=0.100",
     "uvicorn[standard]>=0.23",
-    "sse-starlette>=1.6",
     "python-multipart>=0.0.6",
 ]
 mlx = ["mlx-whisper>=0.3"]
