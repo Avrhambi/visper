@@ -26,6 +26,70 @@ class TestConfidenceOkDicts:
         assert Transcriber._confidence_ok_dicts(segs, -0.5) is False
 
 
+class _FakeParams:
+    tier_used = "balanced"
+    confidence_retry_enabled = False
+    log_prob_threshold = -1.0
+
+    def as_transcribe_kwargs(self):
+        return {"beam_size": 3}
+
+
+class TestWorkerSegmentReplay:
+    """The worker returns every segment in one batch, so _transcribe_via_worker
+    replays them through the caller's on_segment — otherwise /transcribe returns
+    an empty segment list and /transcribe/stream emits no per-segment events on
+    the default (venv-worker) runtime."""
+
+    def _make(self):
+        tr = Transcriber.__new__(Transcriber)
+        tr._language = "he"
+        tr._denoise = tr._normalize_volume = tr._highpass = False
+        tr._hotwords = None   # type: ignore[assignment]
+        tr._config_label = "c"
+        tr._backend_type = "cpu"
+        tr._get_duration = lambda s: 2.0   # type: ignore[method-assign]
+        return tr
+
+    _RESP = {
+        "text": "hello world",
+        "segments": [
+            {"start": 0.0, "end": 1.0, "text": " hello", "confidence": -0.2},
+            {"start": 1.0, "end": 2.0, "text": " world", "confidence": -0.3},
+        ],
+        "audio_duration": 2.0,
+    }
+
+    def test_replays_each_segment(self):
+        tr = self._make()
+        tr._worker_roundtrip = lambda *a, **k: self._RESP   # type: ignore[method-assign]
+        seen = []
+        res = tr._transcribe_via_worker(
+            "a.wav", "medium", _FakeParams(), False, 500, 400,
+            language="he", on_segment=seen.append,
+        )
+        assert [s["text"] for s in seen] == [" hello", " world"]
+        assert res.segments == self._RESP["segments"]
+
+    def test_no_callback_is_fine(self):
+        tr = self._make()
+        tr._worker_roundtrip = lambda *a, **k: self._RESP   # type: ignore[method-assign]
+        res = tr._transcribe_via_worker(
+            "a.wav", "medium", _FakeParams(), False, 500, 400, language="he",
+        )
+        assert res.text == "hello world"
+
+    def test_abort_before_replay_emits_nothing(self):
+        tr = self._make()
+        tr._worker_roundtrip = lambda *a, **k: self._RESP   # type: ignore[method-assign]
+        seen = []
+        tr._transcribe_via_worker(
+            "a.wav", "medium", _FakeParams(), False, 500, 400, language="he",
+            on_segment=seen.append, is_aborted=lambda: True,
+        )
+        assert seen == []
+
+
 class _FakeMT:
     """Maps each non-blank Hebrew segment to a distinct English string."""
     _EN = {"שלום עולם": "hello world", "מה שלומך": "how are you"}

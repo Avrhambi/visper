@@ -321,7 +321,7 @@ class Transcriber:
                                                vad_filter, vad_min_silence_ms,
                                                vad_speech_pad_ms, is_aborted=is_aborted,
                                                language=_lang, initial_prompt=initial_prompt,
-                                               task=task)
+                                               task=task, on_segment=on_segment)
 
         t0 = time.time()
 
@@ -589,6 +589,7 @@ class Transcriber:
         language: Optional[str] = None,
         initial_prompt: Optional[str] = None,
         task: str = "transcribe",
+        on_segment: Optional[Callable[[dict], None]] = None,
     ) -> TranscriptResult:
         """Send a transcription request to the venv worker subprocess.
 
@@ -597,6 +598,13 @@ class Transcriber:
         silently skipped them: audio pre-processing (denoise / highpass /
         normalize), hotwords, initial_prompt, task=translate, confidence-gated
         retry, and the Hebrew post-normalization pass.
+
+        The worker returns all segments in one batch (no incremental protocol),
+        so ``on_segment`` — when a caller passes one — is replayed over the final
+        (post-retry) segments here. Without this the worker runtime returns an
+        empty ``segments`` list to ``/transcribe`` and streams no per-segment
+        events on ``/transcribe/stream``; the in-process path fires the callback
+        live during decode instead.
         """
         t0 = time.time()
         _lang = language if language is not None else self._language
@@ -675,6 +683,16 @@ class Transcriber:
                     np.save(retry_npy, src_arr.astype(np.float32))
                     retry_path = retry_npy
                 response = self._worker_roundtrip(retry_path, _build_kwargs(params), bucket, retry_npy)
+
+        # Replay the worker's segments through the caller's callback. The worker
+        # has no incremental protocol, so these all fire now, after decode and
+        # any retry — the consumer still sees the final segment list it would
+        # otherwise miss entirely on this runtime.
+        if on_segment is not None and not (is_aborted is not None and is_aborted()):
+            for seg in response.get("segments", []):
+                if is_aborted is not None and is_aborted():
+                    break
+                on_segment(seg)
 
         elapsed = time.time() - t0
         audio_duration = response.get("audio_duration", fallback_duration) or 0.0
