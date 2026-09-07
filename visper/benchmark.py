@@ -1320,7 +1320,10 @@ def format_report_table() -> str:
         else:
             compute = cfg.get("compute_type", "?")
         threads = cfg.get("cpu_threads", "—")
-        tier = cfg.get("auto_accuracy_tier", "?")
+        # Recompute from the measured RTF rather than trusting the stored field —
+        # a results file written before a tier-policy change would otherwise
+        # report a tier the engine no longer selects (see params.get_params).
+        tier = _auto_accuracy_tier(rtf) if isinstance(rtf, (int, float)) else "?"
         lines.append(f"| {bucket} | {dev} | {compute} | {threads} | {rtf_s} | {tier} |")
 
     lines += ["", "_RTF = wall-clock / audio duration; lower is faster, 1.0 = real time._"]
